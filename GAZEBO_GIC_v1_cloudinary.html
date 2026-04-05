@@ -3042,7 +3042,7 @@ function rMySavings(){
       :'')+
     '<div class="card member-section"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase">My Savings History</div>'+
       '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Notes</th></tr></thead><tbody>'+
-      allSav.map(function(s){return'<tr><td>'+fmtD(s.date)+'</td><td>'+MS[s.mo]+' '+s.yr+'</td><td class="green-text" style="font-weight:600">'+fmt(s.amount)+'</td><td style="font-size:11px;color:var(--text3)">'+(s.notes||"—")+'</td></tr>';}).join("")||'<tr><td colspan="4" class="no-data">No savings recorded yet</td></tr>'+
+      (allSav.map(function(s){return'<tr><td>'+fmtD(s.date)+'</td><td>'+MS[s.mo]+' '+s.yr+'</td><td class="green-text" style="font-weight:600">'+fmt(s.amount)+'</td><td style="font-size:11px;color:var(--text3)">'+(s.notes||"—")+'</td></tr>';}).join("")||'<tr><td colspan="4" class="no-data">No savings recorded yet</td></tr>')+
       '</tbody></table></div>'+
     (myFines.length?'<div class="card member-section" style="'+(myFinesUnpaidAmt>0?'border-left:4px solid var(--red);':'')+'">'+
       '<div style="font-size:12px;font-weight:600;color:'+(myFinesUnpaidAmt>0?'var(--red)':'var(--text2)')+';margin-bottom:8px;text-transform:uppercase">⚠️ My Fines Summary</div>'+
