@@ -2373,31 +2373,25 @@ function rFines(){
     return true;
   });
   var filterTitle=finesFilter==="outstanding"?"Outstanding Fine Details":(finesFilter==="collected"?"Collected Fine Details":"All Issued Fine Details");
-  var membersForFilter=activeMembers.filter(function(m){
+  var filteredMembers=activeMembers.filter(function(m){
     var mfn=m.fines||[];
     if(finesFilter==="outstanding")return mfn.some(function(f){return f.status!=="Paid";});
     if(finesFilter==="collected")return mfn.some(function(f){return f.status==="Paid";});
     return mfn.length>0;
   });
-  var membersTitle=finesFilter==="outstanding"?"Members With Outstanding Fines":(finesFilter==="collected"?"Members With Collected Fines":"Members With Issued Fines");
-  var memberRows=membersForFilter.map(function(m){
+  var memberRows=filteredMembers.length?filteredMembers.map(function(m){
     var mfn=m.fines||[];
-    var mfnShown=mfn.filter(function(f){
-      if(finesFilter==="outstanding")return f.status!=="Paid";
-      if(finesFilter==="collected")return f.status==="Paid";
-      return true;
-    });
-    var uAmt=mfnShown.filter(function(f){return f.status!=="Paid";}).reduce(function(t,f){return t+f.amount;},0);
-    var pAmt=mfnShown.filter(function(f){return f.status==="Paid";}).reduce(function(t,f){return t+f.amount;},0);
-    var last=mfnShown.slice().sort(function(a,b){return b.date.localeCompare(a.date);})[0];
+    var uAmt=mfn.filter(function(f){return f.status!=="Paid";}).reduce(function(t,f){return t+f.amount;},0);
+    var pAmt=mfn.filter(function(f){return f.status==="Paid";}).reduce(function(t,f){return t+f.amount;},0);
+    var last=mfn.slice().sort(function(a,b){return b.date.localeCompare(a.date);})[0];
     return'<tr>'+
       '<td><div style="font-weight:500;font-size:12px">'+esc(m.fullName)+'</div><div class="mono" style="font-size:10px;color:var(--text3)">'+m.no+'</div></td>'+
-      '<td style="text-align:center">'+mfnShown.length+'</td>'+
+      '<td style="text-align:center">'+mfn.length+'</td>'+
       '<td class="red-text" style="font-weight:600">'+(uAmt>0?fmt(uAmt):'<span style="color:var(--text3)">—</span>')+'</td>'+
       '<td class="green-text">'+(pAmt>0?fmt(pAmt):'<span style="color:var(--text3)">—</span>')+'</td>'+
       '<td style="font-size:11px;color:var(--text2)">'+(last?esc(last.violation||"—")+' \xb7 '+fmtD(last.date):'—')+'</td>'+
       '<td>'+(CAN(S.user,"record_fines")?'<button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="S.modal={id:\'issue-fine\',data:\''+m.id+'\'};render()">+ Fine</button>':'')+'</td></tr>';
-  }).join("")||'<tr><td colspan="6" class="no-data">No members match this selection.</td></tr>';
+  }).join(""):'<tr><td colspan="6" class="no-data">No members match this fines filter.</td></tr>';
   var logRows=allFines.length?allFines.slice().sort(function(a,b){return b.f.date.localeCompare(a.f.date);}).map(function(x){
     var f=x.f,m=x.m;
     return'<tr>'+
@@ -2432,7 +2426,6 @@ function rFines(){
   '</div>'+
   '<div class="card" style="margin-bottom:14px">'+
     '<div class="alert alert-info" style="font-size:12px;margin-bottom:10px">Standard fine: UGX '+FINE_AMOUNT.toLocaleString()+' per offence. Fines are operational income tracked separately from the savings pool.</div>'+
-    '<h3 style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">'+membersTitle+'</h3>'+
     '<table class="tbl"><thead><tr><th>Member</th><th>Fines</th><th>Outstanding</th><th>Collected</th><th>Last Offence</th><th></th></tr></thead><tbody>'+memberRows+'</tbody></table>'+
   '</div>'+
   '<div class="card" style="margin-bottom:14px">'+
