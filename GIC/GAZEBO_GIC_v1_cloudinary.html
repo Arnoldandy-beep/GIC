@@ -728,6 +728,7 @@ var S={
   users:[],members:[],savings:[],loans:[],repayments:[],interest:[],amendments:[],expenses:[],operationalIncome:[],
   lockouts:{},loading:true,toast:null,realtimeListenersActive:false,
   memberSearch:"",memberStatusFilter:"Active",
+  finesFilter:"all",
   savTab:"overview",savMemberId:"",loanTab:"active",intTab:"overview",expTab:"list",
   usersTab:"admin"
 };
@@ -2365,6 +2366,13 @@ function rFines(){
   var totalCol=totalFinesCollected(),totalOut=totalFinesOutstanding();
   var allFines=[];S.members.forEach(function(m){(m.fines||[]).forEach(function(f){allFines.push({m:m,f:f});});});
   var unpaidFines=allFines.filter(function(x){return x.f.status!=="Paid";});
+  var finesFilter=S.finesFilter||"all";
+  var filteredFines=allFines.filter(function(x){
+    if(finesFilter==="outstanding")return x.f.status!=="Paid";
+    if(finesFilter==="collected")return x.f.status==="Paid";
+    return true;
+  });
+  var filterTitle=finesFilter==="outstanding"?"Outstanding Fine Details":(finesFilter==="collected"?"Collected Fine Details":"All Issued Fine Details");
   var memberRows=activeMembers.map(function(m){
     var mfn=m.fines||[];
     var uAmt=mfn.filter(function(f){return f.status!=="Paid";}).reduce(function(t,f){return t+f.amount;},0);
@@ -2389,19 +2397,34 @@ function rFines(){
       '<td><span class="bdg bdg-'+(f.status==="Paid"?"success":"warning")+'">'+f.status+'</span></td>'+
       '<td>'+(f.status!=="Paid"&&CAN(S.user,"record_fines")?'<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFinePaid(\''+m.id+'\',\''+f.ref+'\')">Mark Paid</button>':'')+'</td></tr>';
   }).join(""):'<tr><td colspan="7" class="no-data">No fines have been issued yet.</td></tr>';
+  var filteredLogRows=filteredFines.length?filteredFines.slice().sort(function(a,b){return b.f.date.localeCompare(a.f.date);}).map(function(x){
+    var f=x.f,m=x.m;
+    return'<tr>'+
+      '<td style="font-size:11px">'+fmtD(f.date)+'</td>'+
+      '<td><div style="font-size:12px;font-weight:500">'+esc(m.fullName)+'</div><div class="mono" style="font-size:10px;color:var(--text3)">'+m.no+'</div></td>'+
+      '<td style="font-size:12px">'+esc(f.violation||"—")+'</td>'+
+      '<td style="font-size:11px;color:var(--text2)">'+(f.notes?esc(f.notes):'—')+'</td>'+
+      '<td class="'+(f.status==="Paid"?"green-text":"red-text")+'" style="font-weight:600">'+fmt(f.amount)+'</td>'+
+      '<td><span class="bdg bdg-'+(f.status==="Paid"?"success":"warning")+'">'+f.status+'</span></td>'+
+      '<td>'+(f.status!=="Paid"&&CAN(S.user,"record_fines")?'<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFinePaid(\''+m.id+'\',\''+f.ref+'\')">Mark Paid</button>':'')+'</td></tr>';
+  }).join(""):'<tr><td colspan="7" class="no-data">No fines match this selection.</td></tr>';
   return'<div class="fadein"><div class="fl" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">'+
     '<button class="btn btn-g btn-sm" onclick="S.view=\'list\';render()">← Back</button>'+
     '<h1 class="fd page-title" style="font-size:18px;margin-left:8px">Member Fines Register</h1>'+
     (CAN(S.user,"record_fines")?'<button class="btn btn-d btn-sm" style="margin-left:auto" onclick="S.modal={id:\'issue-fine\',data:\'\'};render()">⚠️ Issue Fine</button>':'')+
   '</div>'+
   '<div class="grid3" style="margin-bottom:14px">'+
-    '<div class="stat-card"><div class="stat-icon" style="background:#C0392B1A">⚠️</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Outstanding</div><div style="font-size:16px;font-weight:700;color:var(--red);margin-top:2px">'+fmt(totalOut)+'</div><div style="font-size:10px;color:var(--text3)">'+unpaidFines.length+' unpaid fine(s)</div></div></div>'+
-    '<div class="stat-card"><div class="stat-icon" style="background:#057A551A">💰</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Collected</div><div style="font-size:16px;font-weight:700;color:var(--green);margin-top:2px">'+fmt(totalCol)+'</div></div></div>'+
-    '<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">📋</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Total Issued</div><div style="font-size:16px;font-weight:700;color:var(--navy);margin-top:2px">'+allFines.length+' fine(s)</div></div></div>'+
+    '<div class="stat-card" onclick="S.finesFilter=\'outstanding\';render()" style="cursor:pointer;'+(finesFilter==="outstanding"?'outline:2px solid var(--red);':'')+'"><div class="stat-icon" style="background:#C0392B1A">⚠️</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Outstanding</div><div style="font-size:16px;font-weight:700;color:var(--red);margin-top:2px">'+fmt(totalOut)+'</div><div style="font-size:10px;color:var(--text3)">'+unpaidFines.length+' unpaid fine(s)</div></div></div>'+
+    '<div class="stat-card" onclick="S.finesFilter=\'collected\';render()" style="cursor:pointer;'+(finesFilter==="collected"?'outline:2px solid var(--green);':'')+'"><div class="stat-icon" style="background:#057A551A">💰</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Collected</div><div style="font-size:16px;font-weight:700;color:var(--green);margin-top:2px">'+fmt(totalCol)+'</div></div></div>'+
+    '<div class="stat-card" onclick="S.finesFilter=\'all\';render()" style="cursor:pointer;'+(finesFilter==="all"?'outline:2px solid var(--gold);':'')+'"><div class="stat-icon" style="background:#C9A84C1A">📋</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Total Issued</div><div style="font-size:16px;font-weight:700;color:var(--navy);margin-top:2px">'+allFines.length+' fine(s)</div></div></div>'+
   '</div>'+
   '<div class="card" style="margin-bottom:14px">'+
     '<div class="alert alert-info" style="font-size:12px;margin-bottom:10px">Standard fine: UGX '+FINE_AMOUNT.toLocaleString()+' per offence. Fines are operational income tracked separately from the savings pool.</div>'+
     '<table class="tbl"><thead><tr><th>Member</th><th>Fines</th><th>Outstanding</th><th>Collected</th><th>Last Offence</th><th></th></tr></thead><tbody>'+memberRows+'</tbody></table>'+
+  '</div>'+
+  '<div class="card" style="margin-bottom:14px">'+
+    '<h3 style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">'+filterTitle+'</h3>'+
+    '<table class="tbl"><thead><tr><th>Date</th><th>Member</th><th>Violation</th><th>Notes</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'+filteredLogRows+'</tbody></table>'+
   '</div>'+
   '<div class="card">'+
     '<h3 style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">Full Fines Log</h3>'+
@@ -2965,7 +2988,10 @@ function rMySavings(){
   var allSav=S.savings.filter(function(s){return s.memberId===m.id&&!s.voided;}).sort(function(a,b){return b.date.localeCompare(a.date);});
   var n=now();var thisMonthPaid=allSav.some(function(s){return s.yr===n.getFullYear()&&s.mo===n.getMonth();});
   var thisFee=(m.annualFees||[]).filter(function(f){return f.year===2026;})[0];
+  var myFines=(m.fines||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
   var myFinesUnpaid=(m.fines||[]).filter(function(f){return f.status!=="Paid";});
+  var myFinesPaid=(m.fines||[]).filter(function(f){return f.status==="Paid";});
+  var myFinesPaidAmt=myFinesPaid.reduce(function(t,f){return t+f.amount;},0);
   var myFinesUnpaidAmt=myFinesUnpaid.reduce(function(t,f){return t+f.amount;},0);
   var arrears=getMemberTotalArrears(m.id);
   var inNotice=n>=PENALTY_NOTICE_DATE;var inPenalty=n>PENALTY_START_DATE;
@@ -3023,10 +3049,18 @@ function rMySavings(){
           '<div class="bdg bdg-warning" style="font-size:13px;padding:6px 12px">⚠️ Outstanding</div>'+
           '<div style="font-size:11px;color:var(--text3);margin-top:8px">Amount due: '+fmt(REG_FEE)+' · Due by '+annualFeeDeadline(2026)+'</div>')+
       '</div></div>'+
-    (myFinesUnpaidAmt>0?'<div class="card" style="margin-bottom:12px;border-left:4px solid var(--red)"><div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:8px;text-transform:uppercase">⚠️ Outstanding Fines</div>'+
-      '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Violation</th><th>Notes</th><th>Amount</th></tr></thead><tbody>'+
-      myFinesUnpaid.map(function(f){return'<tr><td>'+fmtD(f.date)+'</td><td style="font-size:11px">'+esc(f.violation||"—")+'</td><td style="font-size:11px;color:var(--text2)">'+(f.notes?esc(f.notes):'—')+'</td><td class="red-text" style="font-weight:600">'+fmt(f.amount)+'</td></tr>';}).join("")+
-      '</tbody></table><div style="font-size:11px;color:var(--text3);margin-top:8px">Please contact the Treasurer to settle your outstanding fines totalling <strong class="red-text">'+fmt(myFinesUnpaidAmt)+'</strong>.</div></div>':"")+
+    '<div class="card" style="margin-bottom:12px;'+(myFinesUnpaidAmt>0?'border-left:4px solid var(--red);':'')+'">'+
+      '<div style="font-size:12px;font-weight:600;color:'+(myFinesUnpaidAmt>0?'var(--red)':'var(--text2)')+';margin-bottom:8px;text-transform:uppercase">⚠️ My Fines Summary</div>'+
+      '<div class="grid3" style="margin-bottom:10px">'+
+        '<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">📋</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Total Issued</div><div style="font-size:16px;font-weight:700;color:var(--navy);margin-top:2px">'+myFines.length+' fine(s)</div></div></div>'+
+        '<div class="stat-card"><div class="stat-icon" style="background:#057A551A">💰</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Collected</div><div style="font-size:16px;font-weight:700;color:var(--green);margin-top:2px">'+fmt(myFinesPaidAmt)+'</div></div></div>'+
+        '<div class="stat-card"><div class="stat-icon" style="background:#C0392B1A">⚠️</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Outstanding</div><div style="font-size:16px;font-weight:700;color:var(--red);margin-top:2px">'+fmt(myFinesUnpaidAmt)+'</div></div></div>'+
+      '</div>'+
+      '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Violation</th><th>Notes</th><th>Amount</th><th>Status</th></tr></thead><tbody>'+
+      (myFines.length?myFines.map(function(f){return'<tr><td>'+fmtD(f.date)+'</td><td style="font-size:11px">'+esc(f.violation||"—")+'</td><td style="font-size:11px;color:var(--text2)">'+(f.notes?esc(f.notes):'—')+'</td><td class="'+(f.status==="Paid"?'green-text':'red-text')+'" style="font-weight:600">'+fmt(f.amount)+'</td><td><span class="bdg bdg-'+(f.status==="Paid"?'success':'warning')+'">'+f.status+'</span></td></tr>';}).join(""):'<tr><td colspan="5" class="no-data">No fines on your record.</td></tr>')+
+      '</tbody></table>'+
+      (myFinesUnpaidAmt>0?'<div style="font-size:11px;color:var(--text3);margin-top:8px">Please contact the Treasurer to settle your outstanding fines totalling <strong class="red-text">'+fmt(myFinesUnpaidAmt)+'</strong>.</div>':'')+
+    '</div>'+
     '<div class="card"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase">My Savings History</div>'+
       '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Notes</th></tr></thead><tbody>'+
       allSav.map(function(s){return'<tr><td>'+fmtD(s.date)+'</td><td>'+MS[s.mo]+' '+s.yr+'</td><td class="green-text" style="font-weight:600">'+fmt(s.amount)+'</td><td style="font-size:11px;color:var(--text3)">'+(s.notes||"—")+'</td></tr>';}).join("")||'<tr><td colspan="4" class="no-data">No savings recorded yet</td></tr>'+
