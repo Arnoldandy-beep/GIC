@@ -2948,12 +2948,13 @@ function rMyAccount(){
 }
 
 // ─── 27. MEMBER PORTAL ─────────────────────────────
+function goMySavings(){S.page="my-savings";render();}
 function rMemberPortal(){
   var pages={"my-savings":rMySavings,"my-loans":rMyLoans,"my-eligibility":rMyEligibility,"my-profile":rMyProfile};
   var m=getMyMember();
   var unpaidFines=m?(m.fines||[]).filter(function(f){return f.status!=="Paid";}):[]; 
   var unpaidAmt=unpaidFines.reduce(function(t,f){return t+f.amount;},0);
-  var finesBanner=unpaidAmt>0?'<div class="alert alert-err" style="margin:12px 12px 0;border-radius:10px;cursor:pointer" onclick="S.page=\'my-savings\';render()">'+
+  var finesBanner=unpaidAmt>0?'<div class="alert alert-err" style="margin:12px 12px 0;border-radius:10px;cursor:pointer" onclick="goMySavings()">'+
     '<span style="font-size:20px">⚠️</span> '+
     '<span><strong>'+unpaidFines.length+' Outstanding Fine'+(unpaidFines.length>1?'s':'')+' — '+fmt(unpaidAmt)+'</strong><br>'+
     '<span style="font-size:12px">Tap to view your fines and contact the Treasurer to settle.</span></span></div>':'';
