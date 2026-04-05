@@ -1,0 +1,33 @@
+﻿# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Backups
+*.backup
+*.bak
+*_backup_*
+
+# Node (if you add npm packages later)
+node_modules/
+package-lock.json
+
+# Build/Deployment
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.production.local
+
+# Netlify
+.netlify/
