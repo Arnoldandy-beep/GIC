@@ -123,8 +123,10 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
 .member-hero::before{content:"🦅";position:absolute;right:-10px;top:-10px;font-size:80px;opacity:.08}
 .savings-badge{background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:14px;text-align:center}
 .member-savings-page .member-section{margin-bottom:12px}
-.member-nav-inline{display:flex!important;height:auto;border-top:none;border-radius:12px;overflow-x:auto;background:var(--navy)}
-.member-nav-inline .bn-item{padding:10px 6px;min-width:0}
+.member-nav-inline{display:flex!important;height:auto;border-top:none;border-radius:12px;overflow-x:auto;background:var(--navy);-webkit-overflow-scrolling:touch}
+.member-nav-inline .bn-item{flex:1;min-width:68px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:#7F8C9A;font-size:10px;font-weight:500;padding:10px 6px;transition:color .2s;text-decoration:none;border:none;background:none;touch-action:manipulation}
+.member-nav-inline .bn-item.active{color:var(--gold)}
+.member-nav-inline .bn-item .bn-ic{font-size:20px;line-height:1}
 .eligibility-bar{height:12px;background:var(--gray2);border-radius:10px;overflow:hidden;margin:8px 0}
 /* EXPENSE CARD */
 .exp-card{border-left:4px solid var(--red);background:white;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px #00000010}
@@ -3029,7 +3031,7 @@ function rMySavings(){
         '<div style="font-size:11px;color:var(--text3);margin-top:6px">Contact the Treasurer to arrange payment · Monthly savings amount: '+fmt(MC)+
           (inPenalty?' · Daily penalty rate: 1% of '+fmt(MC)+' = '+fmt(Math.round(MC*DAILY_PENALTY_RATE))+'/day':'')+
         '</div></div>'
-      :'<div class="card member-section"><div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">✅ Savings Arrears</div><div style="font-size:12px;color:var(--text3)">You currently have no outstanding savings arrears.</div></div>')+
+      :'')+
     '<div class="card member-section"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase">My Savings History</div>'+
       '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Notes</th></tr></thead><tbody>'+
       allSav.map(function(s){return'<tr><td>'+fmtD(s.date)+'</td><td>'+MS[s.mo]+' '+s.yr+'</td><td class="green-text" style="font-weight:600">'+fmt(s.amount)+'</td><td style="font-size:11px;color:var(--text3)">'+(s.notes||"—")+'</td></tr>';}).join("")||'<tr><td colspan="4" class="no-data">No savings recorded yet</td></tr>'+
@@ -3047,7 +3049,7 @@ function rMySavings(){
       (myFinesUnpaidAmt>0?'<div style="font-size:11px;color:var(--text3);margin-top:8px">Please contact the Treasurer to settle your outstanding fines totalling <strong class="red-text">'+fmt(myFinesUnpaidAmt)+'</strong>.</div>':'')+
     '</div>':'')+
     '<div class="card member-section" style="padding:0">'+
-      '<nav class="member-bottom-nav member-nav-inline">'+rMemberBottomNav()+'</nav>'+
+      '<nav class="member-nav-inline">'+rMemberBottomNav()+'</nav>'+
     '</div></div>';
 }
 
