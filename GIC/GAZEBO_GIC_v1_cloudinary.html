@@ -1655,7 +1655,7 @@ function render(){
       '<nav class="bottom-nav">'+rBottomNav()+"</nav>"+rToast();
   } else {
     // Member portal — full width, bottom nav on mobile
-    var memberBottomNav=(S.page==="my-savings")?"":'<nav class="bottom-nav member-bottom-nav">'+rMemberBottomNav()+"</nav>";
+    var memberBottomNav='<nav class="bottom-nav member-bottom-nav">'+rMemberBottomNav()+"</nav>";
     root.innerHTML='<header style="background:var(--navy);padding:10px 16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
       '<img src="'+LOGO_IMG+'" style="height:40px;max-width:220px;object-fit:contain;image-rendering:-webkit-optimize-contrast"></header>'+
       '<main class="page-content" style="max-width:600px;margin:0 auto;width:100%;flex:1;overflow-y:auto;padding-bottom:16px">'+rMemberPortal()+"</main>"+
