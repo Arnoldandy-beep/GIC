@@ -123,7 +123,7 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
 .member-hero::before{content:"🦅";position:absolute;right:-10px;top:-10px;font-size:80px;opacity:.08}
 .savings-badge{background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:14px;text-align:center}
 .member-savings-page .member-section{margin-bottom:12px}
-.member-nav-inline{height:auto;border-top:none;border-radius:12px;overflow:hidden}
+.member-nav-inline{display:flex!important;height:auto;border-top:none;border-radius:12px;overflow-x:auto;background:var(--navy)}
 .member-nav-inline .bn-item{padding:10px 6px;min-width:0}
 .eligibility-bar{height:12px;background:var(--gray2);border-radius:10px;overflow:hidden;margin:8px 0}
 /* EXPENSE CARD */
@@ -3034,7 +3034,7 @@ function rMySavings(){
       '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Notes</th></tr></thead><tbody>'+
       allSav.map(function(s){return'<tr><td>'+fmtD(s.date)+'</td><td>'+MS[s.mo]+' '+s.yr+'</td><td class="green-text" style="font-weight:600">'+fmt(s.amount)+'</td><td style="font-size:11px;color:var(--text3)">'+(s.notes||"—")+'</td></tr>';}).join("")||'<tr><td colspan="4" class="no-data">No savings recorded yet</td></tr>'+
       '</tbody></table></div>'+
-    '<div class="card member-section" style="'+(myFinesUnpaidAmt>0?'border-left:4px solid var(--red);':'')+'">'+
+    (myFines.length?'<div class="card member-section" style="'+(myFinesUnpaidAmt>0?'border-left:4px solid var(--red);':'')+'">'+
       '<div style="font-size:12px;font-weight:600;color:'+(myFinesUnpaidAmt>0?'var(--red)':'var(--text2)')+';margin-bottom:8px;text-transform:uppercase">⚠️ My Fines Summary</div>'+
       '<div class="grid3" style="margin-bottom:10px">'+
         '<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">📋</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Total Issued</div><div style="font-size:16px;font-weight:700;color:var(--navy);margin-top:2px">'+myFines.length+' fine(s)</div></div></div>'+
@@ -3045,7 +3045,7 @@ function rMySavings(){
       (myFines.length?myFines.map(function(f){return'<tr><td>'+fmtD(f.date)+'</td><td style="font-size:11px">'+esc(f.violation||"—")+'</td><td style="font-size:11px;color:var(--text2)">'+(f.notes?esc(f.notes):'—')+'</td><td class="'+(f.status==="Paid"?'green-text':'red-text')+'" style="font-weight:600">'+fmt(f.amount)+'</td><td><span class="bdg bdg-'+(f.status==="Paid"?'success':'warning')+'">'+f.status+'</span></td></tr>';}).join(""):'<tr><td colspan="5" class="no-data">No fines on your record.</td></tr>')+
       '</tbody></table>'+
       (myFinesUnpaidAmt>0?'<div style="font-size:11px;color:var(--text3);margin-top:8px">Please contact the Treasurer to settle your outstanding fines totalling <strong class="red-text">'+fmt(myFinesUnpaidAmt)+'</strong>.</div>':'')+
-    '</div>'+
+    '</div>':'')+
     '<div class="card member-section" style="padding:0">'+
       '<nav class="member-bottom-nav member-nav-inline">'+rMemberBottomNav()+'</nav>'+
     '</div></div>';
