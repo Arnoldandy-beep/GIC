@@ -122,6 +122,9 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
 .member-hero{background:linear-gradient(135deg,var(--navy) 0%,var(--navy3) 100%);border-radius:14px;padding:20px;color:white;margin-bottom:16px;position:relative;overflow:hidden}
 .member-hero::before{content:"🦅";position:absolute;right:-10px;top:-10px;font-size:80px;opacity:.08}
 .savings-badge{background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:14px;text-align:center}
+.member-savings-page .member-section{margin-bottom:12px}
+.member-nav-inline{height:auto;border-top:none;border-radius:12px;overflow:hidden}
+.member-nav-inline .bn-item{padding:10px 6px;min-width:0}
 .eligibility-bar{height:12px;background:var(--gray2);border-radius:10px;overflow:hidden;margin:8px 0}
 /* EXPENSE CARD */
 .exp-card{border-left:4px solid var(--red);background:white;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px #00000010}
@@ -141,6 +144,12 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
   .bn-item{position:relative}
   .member-bottom-nav { position: static !important; }
   .grid2,.grid3,.grid4{grid-template-columns:1fr!important}
+  .member-savings-page .grid2,.member-savings-page .grid3{gap:10px}
+  .member-savings-page .member-hero{padding:14px;margin-bottom:10px}
+  .member-savings-page .savings-badge{padding:10px}
+  .member-savings-page .card{padding:12px}
+  .member-savings-page .tbl th,.member-savings-page .tbl td{padding:6px 8px}
+  .member-nav-inline .bn-item{padding:8px 4px;font-size:9px}
   .fg{grid-template-columns:1fr!important}.fg3{grid-template-columns:1fr 1fr!important}
   .full{grid-column:1/-1}
   .modal{border-radius:16px 16px 0 0;max-height:92vh;margin:0;position:fixed;bottom:0;left:0;right:0;max-width:100%!important}
@@ -1644,10 +1653,11 @@ function render(){
       '<nav class="bottom-nav">'+rBottomNav()+"</nav>"+rToast();
   } else {
     // Member portal — full width, bottom nav on mobile
+    var memberBottomNav=(S.page==="my-savings")?"":'<nav class="bottom-nav member-bottom-nav">'+rMemberBottomNav()+"</nav>";
     root.innerHTML='<header style="background:var(--navy);padding:10px 16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
       '<img src="'+LOGO_IMG+'" style="height:40px;max-width:220px;object-fit:contain;image-rendering:-webkit-optimize-contrast"></header>'+
       '<main class="page-content" style="max-width:600px;margin:0 auto;width:100%;flex:1;overflow-y:auto;padding-bottom:16px">'+rMemberPortal()+"</main>"+
-      '<nav class="bottom-nav member-bottom-nav">'+rMemberBottomNav()+"</nav>"+rToast();
+      memberBottomNav+rToast();
   }
   normalizeSavingsNotes();
   enhanceSavingsLedger();
@@ -2974,7 +2984,7 @@ function rMySavings(){
     noticeHtml='<div class="alert alert-warn">📅 <strong>ACTION REQUIRED</strong>: You are behind on your savings contributions. All savings must be current by <strong>30 June 2026</strong> to avoid offboarding and daily penalties from 1 August 2026.</div>';
   }
 
-  return'<div class="fadein">'+noticeHtml+
+  return'<div class="fadein member-savings-page">'+noticeHtml+
     '<div class="member-hero">'+
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'+
         (m.passportPhoto?'<img src="'+m.passportPhoto+'" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)">'
@@ -2990,8 +3000,20 @@ function rMySavings(){
         '<div class="savings-badge"><div style="font-size:10px;color:#9CA3AF">Locked</div><div style="font-size:16px;font-weight:700;color:#F87171;margin-top:4px">'+fmt(lk)+'</div></div>'+
         '<div class="savings-badge"><div style="font-size:10px;color:#9CA3AF">Available</div><div style="font-size:16px;font-weight:700;color:#6EE7B7;margin-top:4px">'+fmt(av)+'</div></div>'+
       '</div></div>'+
+    '<div class="grid2 member-section">'+
+      '<div class="card"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Monthly Contributions</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Monthly target: <strong>'+fmt(MC)+'</strong></div>'+
+        '<div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" style="width:'+Math.min(100,Math.round((allSav.length/MGRID.length)*100))+'%;background:var(--gold)"></div></div>'+
+        '<div style="font-size:11px;color:var(--text3)">'+allSav.length+' of '+MGRID.length+' months paid · '+Math.round((allSav.length/MGRID.length)*100)+'% on track</div></div>'+
+      '<div class="card"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">2026 Annual Fee</div>'+
+        (thisFee&&thisFee.status==="Paid"?
+          '<div class="bdg bdg-success" style="font-size:13px;padding:6px 12px">✅ Paid on '+fmtD(thisFee.date)+'</div>'+
+          '<div style="font-size:11px;color:var(--text3);margin-top:8px">Amount: '+fmt(REG_FEE)+'</div>':
+          '<div class="bdg bdg-warning" style="font-size:13px;padding:6px 12px">⚠️ Outstanding</div>'+
+          '<div style="font-size:11px;color:var(--text3);margin-top:8px">Amount due: '+fmt(REG_FEE)+' · Due by '+annualFeeDeadline(2026)+'</div>')+
+      '</div></div>'+
     (arrears.totalOwed>0?
-      '<div class="card" style="margin-bottom:12px;border:2px solid var(--red)">'+
+      '<div class="card member-section" style="border:2px solid var(--red)">'+
         '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px">⚠️ Savings Arrears</div>'+
         '<table class="tbl tbl-sm"><thead><tr><th>Period</th><th>Shortfall</th>'+
           (inPenalty?'<th>Penalty Days</th><th>Penalty</th>':'')+
@@ -3006,19 +3028,13 @@ function rMySavings(){
           '<span>Total Outstanding</span><span class="red-text">'+fmt(arrears.totalOwed)+'</span></div>'+
         '<div style="font-size:11px;color:var(--text3);margin-top:6px">Contact the Treasurer to arrange payment · Monthly savings amount: '+fmt(MC)+
           (inPenalty?' · Daily penalty rate: 1% of '+fmt(MC)+' = '+fmt(Math.round(MC*DAILY_PENALTY_RATE))+'/day':'')+
-        '</div></div>':'')+'<div class="grid2" style="margin-bottom:12px">'+
-      '<div class="card"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Monthly Contributions</div>'+
-        '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Monthly target: <strong>'+fmt(MC)+'</strong></div>'+
-        '<div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" style="width:'+Math.min(100,Math.round((allSav.length/MGRID.length)*100))+'%;background:var(--gold)"></div></div>'+
-        '<div style="font-size:11px;color:var(--text3)">'+allSav.length+' of '+MGRID.length+' months paid · '+Math.round((allSav.length/MGRID.length)*100)+'% on track</div></div>'+
-      '<div class="card"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">2026 Annual Fee</div>'+
-        (thisFee&&thisFee.status==="Paid"?
-          '<div class="bdg bdg-success" style="font-size:13px;padding:6px 12px">✅ Paid on '+fmtD(thisFee.date)+'</div>'+
-          '<div style="font-size:11px;color:var(--text3);margin-top:8px">Amount: '+fmt(REG_FEE)+'</div>':
-          '<div class="bdg bdg-warning" style="font-size:13px;padding:6px 12px">⚠️ Outstanding</div>'+
-          '<div style="font-size:11px;color:var(--text3);margin-top:8px">Amount due: '+fmt(REG_FEE)+' · Due by '+annualFeeDeadline(2026)+'</div>')+
-      '</div></div>'+
-    '<div class="card" style="margin-bottom:12px;'+(myFinesUnpaidAmt>0?'border-left:4px solid var(--red);':'')+'">'+
+        '</div></div>'
+      :'<div class="card member-section"><div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">✅ Savings Arrears</div><div style="font-size:12px;color:var(--text3)">You currently have no outstanding savings arrears.</div></div>')+
+    '<div class="card member-section"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase">My Savings History</div>'+
+      '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Notes</th></tr></thead><tbody>'+
+      allSav.map(function(s){return'<tr><td>'+fmtD(s.date)+'</td><td>'+MS[s.mo]+' '+s.yr+'</td><td class="green-text" style="font-weight:600">'+fmt(s.amount)+'</td><td style="font-size:11px;color:var(--text3)">'+(s.notes||"—")+'</td></tr>';}).join("")||'<tr><td colspan="4" class="no-data">No savings recorded yet</td></tr>'+
+      '</tbody></table></div>'+
+    '<div class="card member-section" style="'+(myFinesUnpaidAmt>0?'border-left:4px solid var(--red);':'')+'">'+
       '<div style="font-size:12px;font-weight:600;color:'+(myFinesUnpaidAmt>0?'var(--red)':'var(--text2)')+';margin-bottom:8px;text-transform:uppercase">⚠️ My Fines Summary</div>'+
       '<div class="grid3" style="margin-bottom:10px">'+
         '<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">📋</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Total Issued</div><div style="font-size:16px;font-weight:700;color:var(--navy);margin-top:2px">'+myFines.length+' fine(s)</div></div></div>'+
@@ -3030,10 +3046,9 @@ function rMySavings(){
       '</tbody></table>'+
       (myFinesUnpaidAmt>0?'<div style="font-size:11px;color:var(--text3);margin-top:8px">Please contact the Treasurer to settle your outstanding fines totalling <strong class="red-text">'+fmt(myFinesUnpaidAmt)+'</strong>.</div>':'')+
     '</div>'+
-    '<div class="card"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase">My Savings History</div>'+
-      '<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Notes</th></tr></thead><tbody>'+
-      allSav.map(function(s){return'<tr><td>'+fmtD(s.date)+'</td><td>'+MS[s.mo]+' '+s.yr+'</td><td class="green-text" style="font-weight:600">'+fmt(s.amount)+'</td><td style="font-size:11px;color:var(--text3)">'+(s.notes||"—")+'</td></tr>';}).join("")||'<tr><td colspan="4" class="no-data">No savings recorded yet</td></tr>'+
-      '</tbody></table></div></div>';
+    '<div class="card member-section" style="padding:0">'+
+      '<nav class="member-bottom-nav member-nav-inline">'+rMemberBottomNav()+'</nav>'+
+    '</div></div>';
 }
 
 function rMyLoans(){
