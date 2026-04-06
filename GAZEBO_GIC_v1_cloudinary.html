@@ -3203,7 +3203,8 @@ function rModalContent(){
   var map={"add-savings":mAddSavings,"new-loan":mNewLoan,"add-repayment":mAddRepayment,
     "calc-interest":mCalcInterest,"offboard":mOffboard,"add-user":mAddUser,"edit-user":mEditUser,
     "decline-loan":mDeclineLoan,"edit-loan":mEditLoan,"amend-savings":mAmendSavings,"add-expense":mAddExpense,"add-operational-income":mAddOperationalIncome,
-    "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment};
+    "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment,
+    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine};
   return(map[m.id]||function(){return"";})();
 }
 
@@ -3581,6 +3582,52 @@ function mAddOperationalIncome(){
         '<div class="full"><label class="form-label">Notes</label><textarea class="inp" id="oi-notes" rows="2" placeholder="Reference, payer, receipt no., context..."></textarea></div>'+
       '</div>'+
     '</div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveOperationalIncome()">Record Income</button>');
+}
+
+function mEditExpense(){
+  var eid=S.modal&&S.modal.data;
+  var ex=S.expenses.filter(function(e){return e.id===eid;})[0];
+  if(!ex)return mhdr("Edit Expense")+'<div class="mbody"><div class="no-data">Expense record not found.</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Close</button>');
+  var cats=["Operations","Stationery","Communication","Transport","Meetings","Entertainment","Other"];
+  return mhdr("Edit Expense — "+esc(ex.ref||"Record"))+
+    '<div class="mbody"><div class="fg">'+
+      '<div><label class="form-label">* Amount (UGX)</label><input class="inp" type="number" id="eexp-amount" value="'+Number(ex.amount||0)+'"></div>'+
+      '<div><label class="form-label">* Date</label><input class="inp" type="date" id="eexp-date" value="'+(ex.date||todayStr())+'"></div>'+
+      '<div class="full"><label class="form-label">* Purpose / Description</label><input class="inp" id="eexp-purpose" value="'+esc(ex.purpose||"")+'"></div>'+
+      '<div><label class="form-label">* Category</label><select class="inp" id="eexp-category">'+cats.map(function(c){return'<option'+((ex.category||"Other")===c?' selected':'')+'>'+c+'</option>';}).join("")+'</select></div>'+
+      '<div><label class="form-label">Status</label><input class="inp" value="'+esc(ex.status||"Pending")+'" disabled></div>'+
+      '<div class="full"><label class="form-label">Notes</label><textarea class="inp" id="eexp-notes" rows="2">'+esc(ex.notes||"")+'</textarea></div>'+
+    '</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveEditedExpense()">💾 Save Changes</button>');
+}
+
+function mEditAnnualFee(){
+  var d=S.modal&&S.modal.data||{};
+  var m=S.members.filter(function(x){return x.id===d.memberId;})[0];
+  var fee=m?(m.annualFees||[]).filter(function(f){return f.year===d.year;})[0]:null;
+  if(!m||!fee)return mhdr("Edit Annual Fee")+'<div class="mbody"><div class="no-data">Annual fee record not found.</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Close</button>');
+  return mhdr("Edit Annual Fee — "+esc(m.fullName))+
+    '<div class="mbody"><div class="fg">'+
+      '<div><label class="form-label">Year</label><input class="inp" value="'+d.year+'" disabled></div>'+
+      '<div><label class="form-label">Member No.</label><input class="inp" value="'+esc(m.no||"")+'" disabled></div>'+
+      '<div><label class="form-label">* Amount (UGX)</label><input class="inp" type="number" id="eaf-amount" value="'+Number(fee.amount||REG_FEE)+'"></div>'+
+      '<div><label class="form-label">* Date</label><input class="inp" type="date" id="eaf-date" value="'+(fee.date||todayStr())+'"></div>'+
+      '<div><label class="form-label">* Status</label><select class="inp" id="eaf-status"><option'+(fee.status==="Paid"?' selected':'')+'>Paid</option><option'+(fee.status==="Unpaid"?' selected':'')+'>Unpaid</option></select></div>'+
+    '</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveEditedAnnualFee()">💾 Save Changes</button>');
+}
+
+function mEditFine(){
+  var d=S.modal&&S.modal.data||{};
+  var m=S.members.filter(function(x){return x.id===d.memberId;})[0];
+  var fine=m?(m.fines||[]).filter(function(f){return f.ref===d.fineRef;})[0]:null;
+  if(!m||!fine)return mhdr("Edit Fine")+'<div class="mbody"><div class="no-data">Fine record not found.</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Close</button>');
+  return mhdr("Edit Fine — "+esc(m.fullName))+
+    '<div class="mbody"><div class="fg">'+
+      '<div class="full"><label class="form-label">* Violation</label><input class="inp" id="efn-violation" value="'+esc(fine.violation||"")+'"></div>'+
+      '<div><label class="form-label">* Amount (UGX)</label><input class="inp" type="number" id="efn-amount" value="'+Number(fine.amount||FINE_AMOUNT)+'"></div>'+
+      '<div><label class="form-label">* Date</label><input class="inp" type="date" id="efn-date" value="'+(fine.date||todayStr())+'"></div>'+
+      '<div><label class="form-label">* Status</label><select class="inp" id="efn-status"><option'+(fine.status==="Unpaid"?' selected':'')+'>Unpaid</option><option'+(fine.status==="Paid"?' selected':'')+'>Paid</option></select></div>'+
+      '<div class="full"><label class="form-label">Notes</label><textarea class="inp" id="efn-notes" rows="2">'+esc(fine.notes||"")+'</textarea></div>'+
+    '</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveEditedFine()">💾 Save Changes</button>');
 }
 
 function mNewLoan(){
@@ -4024,23 +4071,7 @@ function editAnnualFeeRecord(memberId,year){
   if(!m){showToast("Member not found","err");return;}
   var fee=(m.annualFees||[]).filter(function(f){return f.year===year;})[0];
   if(!fee){showToast("No fee record found for this year","err");return;}
-  var amount=Number(prompt("Annual fee amount (UGX):",String(fee.amount||REG_FEE)));
-  if(!amount||amount<=0){showToast("Invalid amount","err");return;}
-  var date=prompt("Fee date (YYYY-MM-DD):",fee.date||todayStr());
-  if(date===null)return;
-  var statusInput=prompt("Fee status (Paid or Unpaid):",fee.status||"Paid");
-  if(statusInput===null)return;
-  var status=(statusInput||"").toLowerCase()==="paid"?"Paid":((statusInput||"").toLowerCase()==="unpaid"?"Unpaid":"");
-  if(!status){showToast("Status must be Paid or Unpaid","err");return;}
-  S.members=S.members.map(function(x){
-    if(x.id!==memberId)return x;
-    return Object.assign({},x,{annualFees:(x.annualFees||[]).map(function(f){
-      return f.year===year?Object.assign({},f,{amount:amount,date:(date||todayStr()),status:status}):f;
-    })});
-  });
-  DB.set(K.members,S.members);
-  logEvent("MEMBER",S.user.name,"Annual fee edited: "+m.fullName+" ("+year+")");
-  showToast("Annual fee updated","ok");render();
+  S.modal={id:"edit-annual-fee",data:{memberId:memberId,year:year}};render();
 }
 function deleteAnnualFeeRecord(memberId,year){
   if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
@@ -4093,36 +4124,7 @@ function editFineRecord(memberId,fineRef){
   if(!m){showToast("Member not found","err");return;}
   var fine=(m.fines||[]).filter(function(f){return f.ref===fineRef;})[0];
   if(!fine){showToast("Fine not found","err");return;}
-  var violation=prompt("Violation:",fine.violation||"");
-  if(violation===null||!violation.trim()){showToast("Violation is required","err");return;}
-  var amount=Number(prompt("Fine amount (UGX):",String(fine.amount||FINE_AMOUNT)));
-  if(!amount||amount<=0){showToast("Invalid amount","err");return;}
-  var date=prompt("Fine date (YYYY-MM-DD):",fine.date||todayStr());
-  if(date===null)return;
-  var notes=prompt("Notes (optional):",fine.notes||"");
-  if(notes===null)return;
-  var statusInput=prompt("Status (Paid or Unpaid):",fine.status||"Unpaid");
-  if(statusInput===null)return;
-  var status=(statusInput||"").toLowerCase()==="paid"?"Paid":((statusInput||"").toLowerCase()==="unpaid"?"Unpaid":"");
-  if(!status){showToast("Status must be Paid or Unpaid","err");return;}
-  S.members=S.members.map(function(x){
-    if(x.id!==memberId)return x;
-    return Object.assign({},x,{fines:(x.fines||[]).map(function(f){
-      if(f.ref!==fineRef)return f;
-      var next=Object.assign({},f,{violation:violation.trim(),amount:amount,date:(date||todayStr()),notes:notes,status:status});
-      if(status==="Paid"){
-        next.paidDate=next.paidDate||todayStr();
-        next.paidBy=next.paidBy||S.user.name;
-      }else{
-        delete next.paidDate;
-        delete next.paidBy;
-      }
-      return next;
-    })});
-  });
-  DB.set(K.members,S.members);
-  logEvent("MEMBER",S.user.name,"Fine edited: "+fineRef+" for "+m.fullName);
-  showToast("Fine updated","ok");render();
+  S.modal={id:"edit-fine",data:{memberId:memberId,fineRef:fineRef}};render();
 }
 function deleteFineRecord(memberId,fineRef){
   if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
@@ -4422,22 +4424,84 @@ function editExpenseRecord(eid){
   if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
   var ex=S.expenses.filter(function(e){return e.id===eid;})[0];
   if(!ex){showToast("Expense record not found","err");return;}
-  var amount=Number(prompt("Expense amount (UGX):",String(ex.amount||0)));
+  S.modal={id:"edit-expense",data:eid};render();
+}
+
+function saveEditedExpense(){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var eid=S.modal&&S.modal.data;
+  var ex=S.expenses.filter(function(e){return e.id===eid;})[0];
+  if(!ex){showToast("Expense record not found","err");return;}
+  var amount=Number(v("eexp-amount")||0);
+  var date=v("eexp-date")||todayStr();
+  var purpose=(v("eexp-purpose")||"").trim();
+  var category=(v("eexp-category")||"").trim();
+  var notes=v("eexp-notes")||"";
   if(!amount||amount<=0){showToast("Invalid amount","err");return;}
-  var date=prompt("Expense date (YYYY-MM-DD):",ex.date||todayStr());
-  if(date===null)return;
-  var purpose=prompt("Purpose / description:",ex.purpose||"");
-  if(purpose===null||!purpose.trim()){showToast("Purpose is required","err");return;}
-  var category=prompt("Category:",ex.category||"Other");
-  if(category===null||!category.trim()){showToast("Category is required","err");return;}
-  var notes=prompt("Notes (optional):",ex.notes||"");
-  if(notes===null)return;
+  if(!purpose){showToast("Purpose is required","err");return;}
+  if(!category){showToast("Category is required","err");return;}
   S.expenses=S.expenses.map(function(e){
-    return e.id===eid?Object.assign({},e,{amount:amount,date:(date||todayStr()),purpose:purpose.trim(),category:category.trim(),notes:notes}):e;
+    return e.id===eid?Object.assign({},e,{amount:amount,date:date,purpose:purpose,category:category,notes:notes}):e;
   });
   DB.set(K.expenses,S.expenses);
   logEvent("EXPENSE",S.user.name,"Expense edited: "+ex.ref+" "+fmt(amount));
-  showToast("Expense updated","ok");render();
+  closeModal();showToast("Expense updated","ok");render();
+}
+
+function saveEditedAnnualFee(){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var d=S.modal&&S.modal.data||{};
+  var m=S.members.filter(function(x){return x.id===d.memberId;})[0];
+  if(!m){showToast("Member not found","err");return;}
+  var amount=Number(v("eaf-amount")||0);
+  var date=v("eaf-date")||todayStr();
+  var status=v("eaf-status")||"Paid";
+  if(!amount||amount<=0){showToast("Invalid amount","err");return;}
+  if(status!=="Paid"&&status!=="Unpaid"){showToast("Status must be Paid or Unpaid","err");return;}
+  S.members=S.members.map(function(x){
+    if(x.id!==d.memberId)return x;
+    return Object.assign({},x,{annualFees:(x.annualFees||[]).map(function(f){
+      return f.year===d.year?Object.assign({},f,{amount:amount,date:date,status:status}):f;
+    })});
+  });
+  DB.set(K.members,S.members);
+  logEvent("MEMBER",S.user.name,"Annual fee edited: "+m.fullName+" ("+d.year+")");
+  closeModal();showToast("Annual fee updated","ok");render();
+}
+
+function saveEditedFine(){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var d=S.modal&&S.modal.data||{};
+  var m=S.members.filter(function(x){return x.id===d.memberId;})[0];
+  if(!m){showToast("Member not found","err");return;}
+  var fine=(m.fines||[]).filter(function(f){return f.ref===d.fineRef;})[0];
+  if(!fine){showToast("Fine not found","err");return;}
+  var violation=(v("efn-violation")||"").trim();
+  var amount=Number(v("efn-amount")||0);
+  var date=v("efn-date")||todayStr();
+  var notes=v("efn-notes")||"";
+  var status=v("efn-status")||"Unpaid";
+  if(!violation){showToast("Violation is required","err");return;}
+  if(!amount||amount<=0){showToast("Invalid amount","err");return;}
+  if(status!=="Paid"&&status!=="Unpaid"){showToast("Status must be Paid or Unpaid","err");return;}
+  S.members=S.members.map(function(x){
+    if(x.id!==d.memberId)return x;
+    return Object.assign({},x,{fines:(x.fines||[]).map(function(f){
+      if(f.ref!==d.fineRef)return f;
+      var next=Object.assign({},f,{violation:violation,amount:amount,date:date,notes:notes,status:status});
+      if(status==="Paid"){
+        next.paidDate=next.paidDate||todayStr();
+        next.paidBy=next.paidBy||S.user.name;
+      }else{
+        delete next.paidDate;
+        delete next.paidBy;
+      }
+      return next;
+    })});
+  });
+  DB.set(K.members,S.members);
+  logEvent("MEMBER",S.user.name,"Fine edited: "+d.fineRef+" for "+m.fullName);
+  closeModal();showToast("Fine updated","ok");render();
 }
 function deleteExpenseRecord(eid){
   if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
