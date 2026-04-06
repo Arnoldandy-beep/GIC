@@ -1174,6 +1174,9 @@ function maxLoanMonths(issued){
 function memberTotalSavings(mid){
   return S.savings.filter(function(s){return s.memberId===mid&&!s.voided;}).reduce(function(t,s){return t+s.amount;},0);
 }
+function isMemberOffboarded(m){
+  return !!(m&&(m.status==="Exited"||m.exitDate||m.exitBy||m.exitReason||(m.exitFee||0)>0));
+}
 
 // ─── ACTIVE SAVINGS POOL (excludes exited members) ──
 // Banking standard: when a member exits and their money is returned,
@@ -1182,7 +1185,7 @@ function activePoolSavings(){
   return S.savings.filter(function(s){
     if(s.voided)return false;
     var mem=S.members.filter(function(m){return m.id===s.memberId;})[0];
-    return mem&&mem.status!=="Exited";
+    return mem&&!isMemberOffboarded(mem);
   }).reduce(function(t,s){return t+s.amount;},0);
 }
 
@@ -1576,7 +1579,7 @@ function calcInterestDistribution(year){
   });
   pool=Math.round(pool);
   var decEnd=new Date(year,11,31);
-  var actM=S.members.filter(function(m){return m.status==="Active"||(m.status==="Exited"&&new Date(m.exitDate+"T12:00:00")>decEnd);});
+  var actM=S.members.filter(function(m){return (!isMemberOffboarded(m))||(m.exitDate&&new Date(m.exitDate+"T12:00:00")>decEnd);});
   var arr=actM.map(function(m){
     var sav=S.savings.filter(function(s){return s.memberId===m.id&&!s.voided&&new Date(s.date+"T12:00:00")<=decEnd;}).reduce(function(t,s){return t+s.amount;},0);
     return{memberId:m.id,memberNo:m.no,memberName:m.fullName,savings:sav};
@@ -2138,7 +2141,7 @@ function rDashboard(){
            ["Pool Utilisation",lf.utilizationPct+"%"],
          ["Annual Fees Tracked",fmt(totalAnnualFees)],["Approved Expenses",fmt(totalExpenses)],
          ["Loans Portfolio",fmt(S.loans.reduce(function(t,l){return t+l.principal;},0))],
-         ["Exited Members",S.members.filter(function(m){return m.status==="Exited";}).length]].map(function(p){return'<div class="kv-row"><span class="kv-label">'+p[0]+'</span><span class="kv-value">'+p[1]+'</span></div>';}).join("")+
+         ["Exited Members",S.members.filter(function(m){return isMemberOffboarded(m);}).length]].map(function(p){return'<div class="kv-row"><span class="kv-label">'+p[0]+'</span><span class="kv-value">'+p[1]+'</span></div>';}).join("")+
       '</div></div></div>';
 }
 
@@ -2169,7 +2172,7 @@ function rMemberList(){
       '</td><td data-label="Status"><span class="bdg bdg-'+(m.status==="Active"?"success":m.status==="Exited"?"gray":"danger")+'">'+m.status+'</span></td>'+(canDeleteMember?'<td><button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="event.stopPropagation();requestMemberDelete(\''+m.id+'\')">🗑️ Delete</button></td>':'')+'</tr>';
   }).join("");
   return'<div class="fadein"><div class="page-hdr">'+
-    '<div><h1 class="fd page-title">Members</h1><div class="page-sub">'+S.members.filter(function(m){return m.status==="Active";}).length+' active · '+S.members.filter(function(m){return m.status==="Exited";}).length+' exited</div></div>'+
+    '<div><h1 class="fd page-title">Members</h1><div class="page-sub">'+S.members.filter(function(m){return m.status==="Active";}).length+' active · '+S.members.filter(function(m){return isMemberOffboarded(m);}).length+' exited</div></div>'+
     '<div class="fl flw">'+
       '<button class="btn btn-g btn-sm" onclick="S.view=\'annual-fees\';render()">💳 Fees</button>'+
       '<button class="btn btn-g btn-sm" onclick="S.view=\'fines\';render()">⚠️ Fines</button>'+
@@ -2236,8 +2239,8 @@ function rMemberDetail(){
     '<div class="card" style="margin-top:12px"><div class="sec-hdr" style="margin-top:0">Documents</div>'+
       (m.nidCopy?'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-g btn-sm" onclick="openAttachmentViewer('+jsq(m.nidCopy)+','+jsq(m.nidCopyName||"National ID Copy")+','+jsq(m.nidCopyType||guessMimeFromName(m.nidCopyName||""))+')">📄 View National ID Copy</button><a class="btn btn-p btn-sm" href="'+esc(m.nidCopy)+'" target="_blank" rel="noopener">Open / Download</a></div>':'<div class="no-data" style="padding:14px">No National ID copy uploaded.</div>')+
     '</div>'+
-    (m.status==="Exited"?'<div class="card" style="margin-top:12px;border:2px solid var(--red)"><div class="sec-hdr" style="margin-top:0;color:var(--red)">Exit Record</div>'+
-      kv([["Exit Date",fmtD(m.exitDate)],["Exit Fee (5%)",fmt(m.exitFee)],["Net Payable",fmt(sav+(m.exitFee||0))],["Reason",m.exitReason],["Notes",m.exitNotes]])+
+    (isMemberOffboarded(m)?'<div class="card" style="margin-top:12px;border:2px solid var(--red)"><div class="sec-hdr" style="margin-top:0;color:var(--red)">Exit Record</div>'+
+      kv([["Exit Date",fmtD(m.exitDate)],["Exit Fee ("+Math.round(EXIT_RATE*100)+"%)",fmt(m.exitFee)],["Net Payable",fmt(Math.max(0,sav-(m.exitFee||0)))],["Reason",m.exitReason],["Notes",m.exitNotes]])+
       '</div>':"")+
     '<div class="card" style="margin-top:12px"><div class="fl" style="justify-content:space-between;align-items:center;margin-bottom:8px">'+
       '<div class="sec-hdr" style="margin-top:0;margin-bottom:0">Fines Record</div>'+
@@ -2339,10 +2342,10 @@ function rMemberForm(){
 }
 
 function rExitedMembers(){
-  var exited=S.members.filter(function(m){return m.status==="Exited";});
+  var exited=S.members.filter(function(m){return isMemberOffboarded(m);});
   return'<div class="fadein"><div class="fl" style="gap:8px;margin-bottom:16px"><button class="btn btn-g btn-sm" onclick="S.view=\'list\';render()">← Back</button><h1 class="fd page-title" style="font-size:18px;margin-left:8px">Exited Members Archive</h1></div>'+
     '<div class="card">'+(exited.length?'<table class="tbl"><thead><tr><th>No.</th><th>Name</th><th>Phone</th><th>Joined</th><th>Exit Date</th><th>Exit Fee</th><th>Net Payable</th></tr></thead><tbody>'+
-      exited.map(function(m){var sav=memberTotalSavings(m.id)+(m.exitFee||0);return'<tr onclick="goMemberDetail(\''+m.id+'\')" style="cursor:pointer"><td class="mono gold-text">'+m.no+'</td><td style="font-weight:600">'+esc(m.fullName)+'</td><td>'+m.phone+'</td><td>'+fmtD(m.joined)+'</td><td>'+fmtD(m.exitDate)+'</td><td class="red-text">'+fmt(m.exitFee||0)+'</td><td style="font-weight:700">'+fmt(sav-(m.exitFee||0))+'</td></tr>';}).join("")+
+      exited.map(function(m){var sav=memberTotalSavings(m.id);return'<tr onclick="goMemberDetail(\''+m.id+'\')" style="cursor:pointer"><td class="mono gold-text">'+m.no+'</td><td style="font-weight:600">'+esc(m.fullName)+'</td><td>'+m.phone+'</td><td>'+fmtD(m.joined)+'</td><td>'+fmtD(m.exitDate)+'</td><td class="red-text">'+fmt(m.exitFee||0)+'</td><td style="font-weight:700">'+fmt(Math.max(0,sav-(m.exitFee||0)))+'</td></tr>';}).join("")+
       '</tbody></table>':'<div class="no-data">No exited members.</div>')+'</div></div>';
 }
 
@@ -2463,7 +2466,7 @@ function rSavings(){
       '<td class="navy-text">'+fmt(overviewTotalAv)+'</td>'+
       '<td>'+overviewTotalMo+'</td><td></td></tr>';
     // Exited members note
-    var exitedWithSavings=S.members.filter(function(m){return m.status==="Exited"&&memberTotalSavings(m.id)>0;});
+    var exitedWithSavings=S.members.filter(function(m){return isMemberOffboarded(m)&&memberTotalSavings(m.id)>0;});
     var exitedPoolAmt=exitedWithSavings.reduce(function(t,m){return t+memberTotalSavings(m.id);},0);
     var exitedNote=exitedWithSavings.length>0?
       '<div class="alert alert-info" style="font-size:12px;margin-top:10px">'+
@@ -2874,7 +2877,7 @@ function rReports(){
     '<div class="grid2" style="margin-bottom:14px">'+
       '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Membership</h3>'+
         kv([["Active Members",S.members.filter(function(m){return m.status==="Active";}).length],
-          ["Exited Members",S.members.filter(function(m){return m.status==="Exited";}).length],
+          ["Exited Members",S.members.filter(function(m){return isMemberOffboarded(m);}).length],
           ["Paid This Month",S.members.filter(function(m){return S.savings.some(function(s){return s.memberId===m.id&&!s.voided&&s.yr===n.getFullYear()&&s.mo===n.getMonth();});}).length],
           ["2026 Fees Collected",fmt(totalFees)],
           ["Savings Pool",fmt(totalSav)],
