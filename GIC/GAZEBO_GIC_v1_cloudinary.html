@@ -2246,7 +2246,10 @@ function rMemberDetail(){
     (mFines.length?'<table class="tbl tbl-sm"><thead><tr><th>Date</th><th>Violation</th><th>Notes</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'+
       mFines.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).map(function(f){
         return'<tr><td style="font-size:11px">'+fmtD(f.date)+'</td><td style="font-size:12px">'+esc(f.violation||"—")+'</td><td style="font-size:11px;color:var(--text2)">'+(f.notes?esc(f.notes):'—')+'</td><td class="red-text" style="font-weight:600">'+fmt(f.amount)+'</td><td><span class="bdg bdg-'+(f.status==="Paid"?"success":"warning")+'">'+f.status+'</span></td>'+
-        '<td>'+(f.status!=="Paid"&&CAN(S.user,"record_fines")?'<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFinePaid(\''+m.id+'\',\''+f.ref+'\')">Mark Paid</button>':'')+'</td></tr>';
+        '<td><div class="fl flw" style="gap:4px">'+
+        (f.status!=="Paid"&&CAN(S.user,"record_fines")?'<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFinePaid(\''+m.id+'\',\''+f.ref+'\')">Mark Paid</button>':'')+
+        (canManageFinanceRecords()?'<button class="btn btn-g btn-sm" style="font-size:10px;padding:3px 8px" onclick="editFineRecord(\''+m.id+'\',\''+f.ref+'\')">✏️ Edit</button><button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="deleteFineRecord(\''+m.id+'\',\''+f.ref+'\')">🗑️ Delete</button>':'')+
+        '</div></td></tr>';
       }).join("")+
     '</tbody></table>':'<div class="no-data">No fines on record.</div>')+
     '</div>'+
@@ -2347,16 +2350,20 @@ function rAnnualFees(){
   // Only 2026 onwards
   var year=2026;
   var activeMembers=S.members.filter(function(m){return m.status==="Active";});
+  var canFinanceEdit=canManageFinanceRecords();
   var paid=activeMembers.filter(function(m){return(m.annualFees||[]).some(function(f){return f.year===year&&f.status==="Paid";});});
   var unpaid=activeMembers.filter(function(m){return!(m.annualFees||[]).some(function(f){return f.year===year&&f.status==="Paid";});});
   var totalCollected=paid.reduce(function(t,m){var f=(m.annualFees||[]).filter(function(x){return x.year===year&&x.status==="Paid";})[0];return t+(f?f.amount:0);},0);
   var rows=activeMembers.map(function(m){
     var fee=(m.annualFees||[]).filter(function(f){return f.year===year;})[0];
+    var actions='';
+    if((!fee||fee.status!=="Paid")&&CAN(S.user,"manage_fees"))actions+='<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFeePaid(\''+m.id+'\','+year+')">Mark Paid</button>';
+    if(canFinanceEdit&&fee)actions+='<button class="btn btn-g btn-sm" style="font-size:10px;padding:3px 8px;margin-left:4px" onclick="editAnnualFeeRecord(\''+m.id+'\','+year+')">✏️ Edit</button><button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px;margin-left:4px" onclick="deleteAnnualFeeRecord(\''+m.id+'\','+year+')">🗑️ Delete</button>';
     return'<tr><td><div style="font-weight:500;font-size:12px">'+esc(m.fullName)+'</div><div class="mono" style="font-size:10px;color:var(--text3)">'+m.no+'</div></td>'+
-      '<td>'+fmt(REG_FEE)+'</td>'+
+      '<td>'+fmt((fee&&fee.amount)||REG_FEE)+'</td>'+
       '<td><span class="bdg bdg-'+(fee&&fee.status==="Paid"?"success":"warning")+'">'+(fee&&fee.status||"Unpaid")+'</span></td>'+
       '<td style="font-size:11px">'+fmtD(fee&&fee.date)+'</td>'+
-      '<td>'+(!fee||fee.status!=="Paid"?CAN(S.user,"manage_fees")?'<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFeePaid(\''+m.id+'\','+year+')">Mark Paid</button>':"<span style='color:var(--text3);font-size:11px'>Unpaid</span>":"")+'</td></tr>';
+      '<td>'+(actions||"<span style='color:var(--text3);font-size:11px'>—</span>")+'</td></tr>';
   }).join("");
   return'<div class="fadein"><div class="fl" style="gap:8px;margin-bottom:16px"><button class="btn btn-g btn-sm" onclick="S.view=\'list\';render()">← Back</button><h1 class="fd page-title" style="font-size:18px;margin-left:8px">Annual Registration Fees — '+year+'</h1></div>'+
     '<div class="grid3" style="margin-bottom:14px">'+
@@ -2366,7 +2373,7 @@ function rAnnualFees(){
     '</div>'+
     '<div class="card">'+
       '<div class="alert alert-info" style="font-size:12px;margin-bottom:12px">Annual fees of UGX '+REG_FEE.toLocaleString()+'/member/year cover operational costs and are tracked <strong>separately</strong> from the savings pool. Due by <strong>'+annualFeeDeadline(year)+'</strong>.</div>'+
-      '<table class="tbl"><thead><tr><th>Member</th><th>Amount</th><th>Status</th><th>Date Paid</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<table class="tbl"><thead><tr><th>Member</th><th>Amount</th><th>Status</th><th>Date Paid</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '<div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--gray2);font-size:13px">'+
         '<span style="color:var(--text3)">Total Annual Fees Collected ('+year+')</span>'+
         '<span style="font-weight:700;color:var(--green)">'+fmt(totalCollected)+'</span></div>'+
@@ -2378,6 +2385,7 @@ function rFines(){
   var totalCol=totalFinesCollected(),totalOut=totalFinesOutstanding();
   var allFines=[];S.members.forEach(function(m){(m.fines||[]).forEach(function(f){allFines.push({m:m,f:f});});});
   var unpaidFines=allFines.filter(function(x){return x.f.status!=="Paid";});
+  var canFinanceEdit=canManageFinanceRecords();
   var finesFilter=S.finesFilter||"all";
   var filteredFines=allFines.filter(function(x){
     if(finesFilter==="outstanding")return x.f.status!=="Paid";
@@ -2394,7 +2402,10 @@ function rFines(){
       '<td style="font-size:11px;color:var(--text2)">'+(f.notes?esc(f.notes):'—')+'</td>'+
       '<td class="'+(f.status==="Paid"?"green-text":"red-text")+'" style="font-weight:600">'+fmt(f.amount)+'</td>'+
       '<td><span class="bdg bdg-'+(f.status==="Paid"?"success":"warning")+'">'+f.status+'</span></td>'+
-      '<td>'+(f.status!=="Paid"&&CAN(S.user,"record_fines")?'<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFinePaid(\''+m.id+'\',\''+f.ref+'\')">Mark Paid</button>':'')+'</td></tr>';
+      '<td><div class="fl flw" style="gap:4px">'+
+        (f.status!=="Paid"&&CAN(S.user,"record_fines")?'<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFinePaid(\''+m.id+'\',\''+f.ref+'\')">Mark Paid</button>':'')+
+        (canFinanceEdit?'<button class="btn btn-g btn-sm" style="font-size:10px;padding:3px 8px" onclick="editFineRecord(\''+m.id+'\',\''+f.ref+'\')">✏️ Edit</button><button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="deleteFineRecord(\''+m.id+'\',\''+f.ref+'\')">🗑️ Delete</button>':'')+
+      '</div></td></tr>';
   }).join(""):'<tr><td colspan="7" class="no-data">No fines match this selection.</td></tr>';
   return'<div class="fadein"><div class="fl" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">'+
     '<button class="btn btn-g btn-sm" onclick="S.view=\'list\';render()">← Back</button>'+
@@ -2409,7 +2420,7 @@ function rFines(){
   '<div class="card" style="margin-bottom:14px">'+
     '<div class="alert alert-info" style="font-size:12px;margin-bottom:10px">Standard fine: UGX '+FINE_AMOUNT.toLocaleString()+' per offence. Fines are operational income tracked separately from the savings pool.</div>'+
     '<h3 style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">'+filterTitle+'</h3>'+
-    '<table class="tbl"><thead><tr><th>Date</th><th>Member</th><th>Violation</th><th>Notes</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'+filteredLogRows+'</tbody></table>'+
+    '<table class="tbl"><thead><tr><th>Date</th><th>Member</th><th>Violation</th><th>Notes</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+filteredLogRows+'</tbody></table>'+
   '</div></div>';
 }
 
@@ -2753,6 +2764,7 @@ function rExpenses(){
   var totalPending=pending.reduce(function(t,e){return t+e.amount;},0);
   var canRecord=CAN(S.user,"record_expense");
   var canApprove=CAN(S.user,"approve_expense")||CAN(S.user,"full");
+  var canFinanceEdit=canManageFinanceRecords();
   var tabs='<div class="tab-bar">'+[["list","📋 All Expenses"],["income","💵 Operational Income"+(incomeRows.length?" ("+incomeRows.length+")" :"")],["pending","⏳ Pending"+(pending.length?" ("+pending.length+")" :"")],["summary","📊 Summary"]].map(function(t){return'<button class="tab-btn'+(tab===t[0]?" active":"")+'" onclick="S.expTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join("")+'</div>';
   var content="";
   if(tab==="list"||tab==="pending"){
@@ -2767,10 +2779,13 @@ function rExpenses(){
         '<td data-label="Recorded By" style="font-size:11px">'+esc(e.recordedBy)+'</td>'+
         '<td data-label="Approver" style="font-size:11px">'+(e.requestedApprover||"—")+'</td>'+
         '<td data-label="Status"><span class="bdg bdg-'+(e.status==="Approved"?"success":e.status==="Rejected"?"danger":"warning")+'">'+e.status+'</span></td>'+
-        (canApprove&&e.status==="Pending"?'<td><div class="fl"><button class="btn btn-grn btn-sm" style="padding:3px 8px" onclick="approveExpense(\''+e.id+'\')">✅</button><button class="btn btn-d btn-sm" style="padding:3px 8px;margin-left:4px" onclick="rejectExpense(\''+e.id+'\')">❌</button></div></td>':'<td></td>')+
+        '<td><div class="fl flw" style="gap:4px">'+
+          (canApprove&&e.status==="Pending"?'<button class="btn btn-grn btn-sm" style="padding:3px 8px" onclick="approveExpense(\''+e.id+'\')">✅</button><button class="btn btn-d btn-sm" style="padding:3px 8px" onclick="rejectExpense(\''+e.id+'\')">❌</button>':'')+
+          (canFinanceEdit?'<button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="editExpenseRecord(\''+e.id+'\')">✏️</button><button class="btn btn-d btn-sm" style="padding:3px 8px" onclick="deleteExpenseRecord(\''+e.id+'\')">🗑️</button>':'')+
+        '</div></td>'+
         '</tr>';
     }).join("");
-    content='<div class="mobile-stack"><table class="tbl"><thead><tr><th>Ref</th><th>Date</th><th>Amount</th><th>Purpose</th><th>Category</th><th>By</th><th>Approver</th><th>Status</th><th></th></tr></thead><tbody>'+
+    content='<div class="mobile-stack"><table class="tbl"><thead><tr><th>Ref</th><th>Date</th><th>Amount</th><th>Purpose</th><th>Category</th><th>By</th><th>Approver</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+
       (rows||'<tr><td colspan="9" class="no-data">No expenses '+(tab==="pending"?"pending":"recorded")+'.</td></tr>')+'</tbody></table></div>';
   } else if(tab==="income"){
     content='<div class="mobile-stack"><table class="tbl"><thead><tr><th>Ref</th><th>Date</th><th>Amount</th><th>Source</th><th>Notes</th><th>Recorded By</th></tr></thead><tbody>'+
@@ -4000,6 +4015,47 @@ function markFeePaid(memberId,year){
   DB.set(K.members,S.members);logEvent("MEMBER",S.user.name,"Annual fee paid: "+memberId+" for "+year);showToast("Annual fee marked as paid");render();
 }
 
+function canManageFinanceRecords(){
+  return !!(S.user&&(S.user.access==="treasurer"||S.user.access==="full"));
+}
+function editAnnualFeeRecord(memberId,year){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var m=S.members.filter(function(x){return x.id===memberId;})[0];
+  if(!m){showToast("Member not found","err");return;}
+  var fee=(m.annualFees||[]).filter(function(f){return f.year===year;})[0];
+  if(!fee){showToast("No fee record found for this year","err");return;}
+  var amount=Number(prompt("Annual fee amount (UGX):",String(fee.amount||REG_FEE)));
+  if(!amount||amount<=0){showToast("Invalid amount","err");return;}
+  var date=prompt("Fee date (YYYY-MM-DD):",fee.date||todayStr());
+  if(date===null)return;
+  var statusInput=prompt("Fee status (Paid or Unpaid):",fee.status||"Paid");
+  if(statusInput===null)return;
+  var status=(statusInput||"").toLowerCase()==="paid"?"Paid":((statusInput||"").toLowerCase()==="unpaid"?"Unpaid":"");
+  if(!status){showToast("Status must be Paid or Unpaid","err");return;}
+  S.members=S.members.map(function(x){
+    if(x.id!==memberId)return x;
+    return Object.assign({},x,{annualFees:(x.annualFees||[]).map(function(f){
+      return f.year===year?Object.assign({},f,{amount:amount,date:(date||todayStr()),status:status}):f;
+    })});
+  });
+  DB.set(K.members,S.members);
+  logEvent("MEMBER",S.user.name,"Annual fee edited: "+m.fullName+" ("+year+")");
+  showToast("Annual fee updated","ok");render();
+}
+function deleteAnnualFeeRecord(memberId,year){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var m=S.members.filter(function(x){return x.id===memberId;})[0];
+  if(!m){showToast("Member not found","err");return;}
+  if(!confirm("Delete annual fee record for "+m.fullName+" ("+year+")?"))return;
+  S.members=S.members.map(function(x){
+    if(x.id!==memberId)return x;
+    return Object.assign({},x,{annualFees:(x.annualFees||[]).filter(function(f){return f.year!==year;})});
+  });
+  DB.set(K.members,S.members);
+  logEvent("MEMBER",S.user.name,"Annual fee deleted: "+m.fullName+" ("+year+")");
+  showToast("Annual fee record deleted","warn");render();
+}
+
 function issueFine(){
   if(!CAN(S.user,"record_fines")){showToast("Not authorised to issue fines","err");return;}
   var memberId=v("fi-member");
@@ -4030,6 +4086,56 @@ function markFinePaid(memberId,fineRef){
   DB.set(K.members,S.members);
   logEvent("MEMBER",S.user.name,"Fine paid: "+fineRef);
   showToast("Fine marked as paid");render();
+}
+function editFineRecord(memberId,fineRef){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var m=S.members.filter(function(x){return x.id===memberId;})[0];
+  if(!m){showToast("Member not found","err");return;}
+  var fine=(m.fines||[]).filter(function(f){return f.ref===fineRef;})[0];
+  if(!fine){showToast("Fine not found","err");return;}
+  var violation=prompt("Violation:",fine.violation||"");
+  if(violation===null||!violation.trim()){showToast("Violation is required","err");return;}
+  var amount=Number(prompt("Fine amount (UGX):",String(fine.amount||FINE_AMOUNT)));
+  if(!amount||amount<=0){showToast("Invalid amount","err");return;}
+  var date=prompt("Fine date (YYYY-MM-DD):",fine.date||todayStr());
+  if(date===null)return;
+  var notes=prompt("Notes (optional):",fine.notes||"");
+  if(notes===null)return;
+  var statusInput=prompt("Status (Paid or Unpaid):",fine.status||"Unpaid");
+  if(statusInput===null)return;
+  var status=(statusInput||"").toLowerCase()==="paid"?"Paid":((statusInput||"").toLowerCase()==="unpaid"?"Unpaid":"");
+  if(!status){showToast("Status must be Paid or Unpaid","err");return;}
+  S.members=S.members.map(function(x){
+    if(x.id!==memberId)return x;
+    return Object.assign({},x,{fines:(x.fines||[]).map(function(f){
+      if(f.ref!==fineRef)return f;
+      var next=Object.assign({},f,{violation:violation.trim(),amount:amount,date:(date||todayStr()),notes:notes,status:status});
+      if(status==="Paid"){
+        next.paidDate=next.paidDate||todayStr();
+        next.paidBy=next.paidBy||S.user.name;
+      }else{
+        delete next.paidDate;
+        delete next.paidBy;
+      }
+      return next;
+    })});
+  });
+  DB.set(K.members,S.members);
+  logEvent("MEMBER",S.user.name,"Fine edited: "+fineRef+" for "+m.fullName);
+  showToast("Fine updated","ok");render();
+}
+function deleteFineRecord(memberId,fineRef){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var m=S.members.filter(function(x){return x.id===memberId;})[0];
+  if(!m){showToast("Member not found","err");return;}
+  if(!confirm("Delete fine "+fineRef+" for "+m.fullName+"?"))return;
+  S.members=S.members.map(function(x){
+    if(x.id!==memberId)return x;
+    return Object.assign({},x,{fines:(x.fines||[]).filter(function(f){return f.ref!==fineRef;})});
+  });
+  DB.set(K.members,S.members);
+  logEvent("MEMBER",S.user.name,"Fine deleted: "+fineRef+" for "+m.fullName);
+  showToast("Fine record deleted","warn");render();
 }
 
 async function saveMember(){
@@ -4311,6 +4417,37 @@ function approveExpense(eid){
 function rejectExpense(eid){
   S.expenses=S.expenses.map(function(e){return e.id===eid?Object.assign({},e,{status:"Rejected",approvedBy:S.user.name,approvedAt:todayStr()}):e;});
   DB.set(K.expenses,S.expenses);logEvent("EXPENSE",S.user.name,"Expense REJECTED: "+eid);showToast("Expense rejected","warn");render();
+}
+function editExpenseRecord(eid){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var ex=S.expenses.filter(function(e){return e.id===eid;})[0];
+  if(!ex){showToast("Expense record not found","err");return;}
+  var amount=Number(prompt("Expense amount (UGX):",String(ex.amount||0)));
+  if(!amount||amount<=0){showToast("Invalid amount","err");return;}
+  var date=prompt("Expense date (YYYY-MM-DD):",ex.date||todayStr());
+  if(date===null)return;
+  var purpose=prompt("Purpose / description:",ex.purpose||"");
+  if(purpose===null||!purpose.trim()){showToast("Purpose is required","err");return;}
+  var category=prompt("Category:",ex.category||"Other");
+  if(category===null||!category.trim()){showToast("Category is required","err");return;}
+  var notes=prompt("Notes (optional):",ex.notes||"");
+  if(notes===null)return;
+  S.expenses=S.expenses.map(function(e){
+    return e.id===eid?Object.assign({},e,{amount:amount,date:(date||todayStr()),purpose:purpose.trim(),category:category.trim(),notes:notes}):e;
+  });
+  DB.set(K.expenses,S.expenses);
+  logEvent("EXPENSE",S.user.name,"Expense edited: "+ex.ref+" "+fmt(amount));
+  showToast("Expense updated","ok");render();
+}
+function deleteExpenseRecord(eid){
+  if(!canManageFinanceRecords()){showToast("Not authorised","err");return;}
+  var ex=S.expenses.filter(function(e){return e.id===eid;})[0];
+  if(!ex){showToast("Expense record not found","err");return;}
+  if(!confirm("Delete expense "+ex.ref+"? This cannot be undone."))return;
+  S.expenses=S.expenses.filter(function(e){return e.id!==eid;});
+  DB.set(K.expenses,S.expenses);
+  logEvent("EXPENSE",S.user.name,"Expense deleted: "+ex.ref+" "+fmt(ex.amount));
+  showToast("Expense deleted","warn");render();
 }
 
 function updateLoanType(){
