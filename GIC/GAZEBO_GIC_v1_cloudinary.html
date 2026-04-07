@@ -268,6 +268,10 @@ const firebaseConfig = {
 // }
 const app = firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// Enable offline persistence so writes survive brief network outages and sync when back online
+db.enablePersistence({synchronizeTabs:true}).catch(function(e){
+  if(e.code!=='failed-precondition'&&e.code!=='unimplemented'){console.warn('Firestore persistence error:',e);}
+});
 const storage = (typeof firebase!=="undefined"&&firebase.storage)?firebase.storage():null;
 // Cloudinary upload configuration (set these values for file uploads)
 // Example:
@@ -586,14 +590,18 @@ var DB={
     try {
       await db.collection('data').doc(k).set({ value: clean });
       DB._fbOk=true;
+      return true;
     } catch (e) {
       console.error('DB set error:', e);
-      if(DB._fbOk){DB._fbOk=false;console.warn("Firebase write failed, saved locally only");}
-      if(e.code==="permission-denied"){
-        console.warn("Firestore permission denied on write — update Firestore rules for /data/**/*. ");
-        if(typeof showToast==="function")showToast("Firebase write permission denied. Update Firestore rules.","err");
+      if(DB._fbOk){
+        DB._fbOk=false;
+        var errMsg=e.code==="permission-denied"
+          ?"Firebase permission denied — update Firestore rules."
+          :"⚠️ Cloud save failed — check your internet connection. Changes saved locally only.";
+        if(typeof showToast==="function")showToast(errMsg,"err");
       }
-      _store.set(k, clean); // fallback
+      _store.set(k, clean); // fallback to local only
+      return false;
     }
   }
 };
@@ -4892,7 +4900,9 @@ async function saveUser(){
       }
     }
     S.users=S.users.concat([newUser]);
-    await DB.set(K.users,S.users);closeModal();
+    var saved=await DB.set(K.users,S.users);
+    if(!saved){S.users=S.users.filter(function(u){return u.id!==newUser.id;});render();return;}
+    closeModal();
     logEvent("USER",S.user.name,"User created: "+username);
     showToast("User created");
     // Generate WhatsApp message
