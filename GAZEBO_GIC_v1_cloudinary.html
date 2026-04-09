@@ -5223,9 +5223,9 @@ async function init(){
     var sv=buildSavings();
     await DB.set(K.users,SEED_USERS);await DB.set(K.members,SEED_MEMBERS);await DB.set(K.savings,sv);
     await DB.set(K.loans,[]);await DB.set(K.repayments,[]);await DB.set(K.interest,[]);await DB.set(K.amendments,[]);await DB.set(K.expenses,[]);await DB.set(K.operationalIncome,[]);
-    await DB.set(K.lockouts,{});
+    await DB.set(K.lockouts,{});await DB.set(K.notifications,[]);
     await DB.set(K.seeded,true);
-    S.users=SEED_USERS;S.members=SEED_MEMBERS;S.savings=sv;S.loans=[];S.repayments=[];S.interest=[];S.amendments=[];S.expenses=[];S.operationalIncome=[];S.lockouts={};
+    S.users=SEED_USERS;S.members=SEED_MEMBERS;S.savings=sv;S.loans=[];S.repayments=[];S.interest=[];S.amendments=[];S.expenses=[];S.operationalIncome=[];S.lockouts={};S.notifications=[];
   } else {
     // Load stored data and merge with seed users so seeded role/access updates and new
     // committee accounts land safely without wiping custom passwords, PIN changes, or TOTP.
@@ -5256,7 +5256,7 @@ async function init(){
     S.savings=await DB.get(K.savings)||[];S.loans=await DB.get(K.loans)||[];
     S.repayments=await DB.get(K.repayments)||[];S.interest=await DB.get(K.interest)||[];
     S.amendments=await DB.get(K.amendments)||[];S.expenses=await DB.get(K.expenses)||[];S.operationalIncome=await DB.get(K.operationalIncome)||[];
-    S.lockouts=await DB.get(K.lockouts)||{};
+    S.lockouts=await DB.get(K.lockouts)||{};S.notifications=await DB.get(K.notifications)||[];
   }
   try{
     if(await migrateInlineMemberAttachments()){
