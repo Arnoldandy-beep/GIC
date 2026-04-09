@@ -243,9 +243,22 @@ var _store={
   set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 };
 var _sess={
-  save:function(u){try{sessionStorage.setItem("gic:sess",JSON.stringify({uid:u.id,ts:Date.now()}));}catch(e){}},
+  save:function(u){
+    try{
+      var now=Date.now();
+      var existing=this.load();
+      var issuedAt=existing&&existing.uid===u.id?(existing.issuedAt||existing.ts||now):now;
+      sessionStorage.setItem("gic:sess",JSON.stringify({uid:u.id,issuedAt:issuedAt,expiresAt:issuedAt+SESSION_MAX_AGE_MS}));
+    }catch(e){}
+  },
   load:function(){try{var d=sessionStorage.getItem("gic:sess");return d?JSON.parse(d):null;}catch(e){return null;}},
-  clear:function(){try{sessionStorage.removeItem("gic:sess");}catch(e){}}
+  clear:function(){try{sessionStorage.removeItem("gic:sess");}catch(e){}},
+  isExpired:function(sess){
+    if(!sess)return true;
+    var now=Date.now();
+    var expiresAt=sess.expiresAt||((sess.issuedAt||sess.ts||0)+SESSION_MAX_AGE_MS);
+    return !expiresAt||expiresAt<=now;
+  }
 };
 
 // Firebase for multi-user storage
@@ -398,7 +411,11 @@ function memberCaughtUpByJune(mid){
 // ─── 2. SECURITY ───────────────────────────────────
 var _sessionTimer=null;
 var _sessionWarningTimer=null;
+var _sessionAbsoluteTimer=null;
+var _sessionAbsoluteWarningTimer=null;
+var _sessionListenersBound=false;
 var SESSION_MS=5*60*1000; // 5 minutes
+var SESSION_MAX_AGE_MS=24*60*60*1000; // 24 hours
 var LOCKOUT_MAX=3, LOCKOUT_MS=15*60*1000;
 
 // Pre-configured Telegram (can be overridden in System Users)
@@ -512,8 +529,59 @@ function renderUserAttentionAlerts(user){
   return alerts.map(function(a){return '<div class="alert alert-'+a.type+'">'+a.msg+'</div>';}).join("");
 }
 
+function clearSessionTimers(){
+  clearTimeout(_sessionTimer);
+  clearTimeout(_sessionWarningTimer);
+  clearTimeout(_sessionAbsoluteTimer);
+  clearTimeout(_sessionAbsoluteWarningTimer);
+}
+
+function attachSessionActivityListeners(){
+  if(_sessionListenersBound)return;
+  ["click","keydown","touchstart","scroll","mousemove","focus","blur","input","change"].forEach(function(e){
+    document.addEventListener(e,resetSessionTimer,{passive:true});
+  });
+  _sessionListenersBound=true;
+}
+
+function expireCurrentSession(reason,toastMsg){
+  var activeUser=S.user;
+  clearSessionTimers();
+  _sess.clear();
+  S.user=null;S.loginStep=1;S.loginUser=null;S.page="dashboard";_navHistory=[];
+  if(activeUser)logEvent("LOGOUT",activeUser.name,reason);
+  if(toastMsg)showToast(toastMsg,"warn");
+  render();
+}
+
+function scheduleAbsoluteSessionExpiry(){
+  var sess=_sess.load();
+  if(!S.user||!sess)return;
+  var expiresAt=sess.expiresAt||((sess.issuedAt||sess.ts||0)+SESSION_MAX_AGE_MS);
+  var remaining=expiresAt-Date.now();
+  clearTimeout(_sessionAbsoluteTimer);
+  clearTimeout(_sessionAbsoluteWarningTimer);
+  if(remaining<=0){
+    expireCurrentSession("Session expired — 24 hours elapsed","Session expired — please sign in again");
+    return;
+  }
+  if(remaining>60000){
+    _sessionAbsoluteWarningTimer=setTimeout(function(){
+      if(S.user)showToast("Session will expire in 1 minute due to 24-hour sign-in limit","warn");
+    },remaining-60000);
+  }
+  _sessionAbsoluteTimer=setTimeout(function(){
+    if(S.user)expireCurrentSession("Session expired — 24 hours elapsed","Session expired — please sign in again");
+  },remaining);
+}
+
 function resetSessionTimer(){
   if(!S.user)return;
+  var sess=_sess.load();
+  if(_sess.isExpired(sess)){
+    expireCurrentSession("Session expired — 24 hours elapsed","Session expired — please sign in again");
+    return;
+  }
   clearTimeout(_sessionTimer);
   clearTimeout(_sessionWarningTimer);
   // Show warning 1 minute before expiration
@@ -521,7 +589,7 @@ function resetSessionTimer(){
     if(S.user)showToast("Session will expire in 1 minute due to inactivity","warn");
   },SESSION_MS - 60000);
   _sessionTimer=setTimeout(function(){
-    if(S.user){logEvent("LOGOUT",S.user.name,"Session expired — 5 min idle");S.user=null;S.loginStep=1;S.loginUser=null;S.page="dashboard";showToast("Session expired — please sign in again","warn");render();}
+    if(S.user)expireCurrentSession("Session expired — 5 min idle","Session expired — please sign in again");
   },SESSION_MS);
 }
 
@@ -1885,9 +1953,8 @@ function verifyPin(){
     S.page=S.user.access==="member"?"my-savings":"dashboard";
     _sess.save(S.user);
     resetSessionTimer();
-    ["click","keydown","touchstart","scroll","mousemove","focus","blur","input","change"].forEach(function(e){
-      document.addEventListener(e,resetSessionTimer,{passive:true});
-    });
+    scheduleAbsoluteSessionExpiry();
+    attachSessionActivityListeners();
     setupRealtimeListeners();
     if(needsTOTPSetup){
       // Show TOTP setup modal right after login
@@ -1924,7 +1991,7 @@ function verifyPin(){
 
 function logout(){
   if(S.user)logEvent("LOGOUT",S.user.name,"Signed out");
-  clearTimeout(_sessionTimer);clearTimeout(_sessionWarningTimer);_sess.clear();
+  clearSessionTimers();_sess.clear();
   S.user=null;S.loginStep=1;S.loginUser=null;S.page="dashboard";_navHistory=[];render();
 }
 
@@ -5108,12 +5175,17 @@ async function init(){
   // Restore session from sessionStorage (survives page refresh)
   var sess=_sess.load();
   if(sess&&sess.uid){
-    var u=S.users.filter(function(x){return x.id===sess.uid&&x.active!==false;})[0];
-    if(u){
-      S.user=u;S.page=u.access==="member"?"my-savings":"dashboard";
-      resetSessionTimer();
-      ["click","keydown","touchstart","scroll","mousemove","focus","blur","input","change"].forEach(function(e){document.addEventListener(e,resetSessionTimer,{passive:true});});
-      setupRealtimeListeners();
+    if(_sess.isExpired(sess)){
+      _sess.clear();
+    } else {
+      var u=S.users.filter(function(x){return x.id===sess.uid&&x.active!==false;})[0];
+      if(u){
+        S.user=u;S.page=u.access==="member"?"my-savings":"dashboard";
+        resetSessionTimer();
+        scheduleAbsoluteSessionExpiry();
+        attachSessionActivityListeners();
+        setupRealtimeListeners();
+      }
     }
   }
   S.loading=false;render();
