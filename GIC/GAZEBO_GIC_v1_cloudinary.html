@@ -620,7 +620,7 @@ var MGRID=[
 // ─── 4. DB ─────────────────────────────────────────
 var K={seeded:"gic:seeded6",users:"gic:users",members:"gic:members",savings:"gic:savings",
   loans:"gic:loans",repayments:"gic:repayments",interest:"gic:interest",
-  amendments:"gic:amendments",expenses:"gic:expenses",operationalIncome:"gic:operationalIncome",lockouts:"gic:lockouts"};
+  amendments:"gic:amendments",expenses:"gic:expenses",operationalIncome:"gic:operationalIncome",lockouts:"gic:lockouts",notifications:"gic:notifications"};
 function sanitizeForDb(value){
   if(value===undefined)return null;
   if(value===null)return null;
@@ -812,7 +812,7 @@ function buildSavings(){
 var S={
   loginStep:1,loginUser:null,user:null,
   page:"dashboard",view:"list",selId:null,editId:null,modal:null,
-  users:[],members:[],savings:[],loans:[],repayments:[],interest:[],amendments:[],expenses:[],operationalIncome:[],
+  users:[],members:[],savings:[],loans:[],repayments:[],interest:[],amendments:[],expenses:[],operationalIncome:[],notifications:[],
   lockouts:{},loading:true,toast:null,realtimeListenersActive:false,
   memberSearch:"",memberStatusFilter:"Active",
   finesFilter:"all",
@@ -3064,6 +3064,38 @@ function getMyMember(){
   return memId?S.members.filter(function(x){return x.id===memId;})[0]:null;
 }
 
+// ─── RENDER MEMBER NOTIFICATIONS ────────────────────
+function rMemberNotifications(memberId){
+  var notifs=getMemberNotifications(memberId);
+  if(!notifs.length)return"";
+  
+  return notifs.map(function(n){
+    var monthsText="";
+    if(n.months&&n.months.length){
+      monthsText=n.months.map(function(m){return MS[m.mo]+" "+m.yr;}).join(", ");
+    }
+    var nextDueDateObj=new Date(n.nextDueDate);
+    var nextDueDateFormatted=fmtD(n.nextDueDate);
+    
+    return'<div class="card" style="border-left:4px solid var(--gold);background:rgba(201,168,76,.05);margin-bottom:12px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'+
+        '<div style="font-weight:700;color:var(--gold);font-size:14px">💰 Savings Credit Received</div>'+
+        '<button onclick="dismissNotification(\''+n.id+'\')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;padding:0">✕</button>'+
+      '</div>'+
+      '<div style="background:white;padding:10px;border-radius:6px;margin-bottom:8px">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;margin-bottom:6px">'+
+          '<div><div style="color:var(--text3);font-size:11px;text-transform:uppercase">Amount Credited</div><div style="font-weight:700;color:var(--green);font-size:14px;margin-top:2px">'+fmt(n.amount)+'</div></div>'+
+          '<div><div style="color:var(--text3);font-size:11px;text-transform:uppercase">Months Covered</div><div style="font-weight:700;color:var(--navy);font-size:14px;margin-top:2px">'+n.monthsCovered+' month'+(n.monthsCovered!==1?'s':'')+'</div></div>'+
+        '</div>'+
+        (monthsText?'<div style="font-size:11px;color:var(--text2);margin-bottom:6px"><strong>Periods:</strong> '+monthsText+'</div>':'')+
+        '<div style="font-size:11px;color:var(--text2);margin-bottom:6px"><strong>Next Due:</strong> '+nextDueDateFormatted+'</div>'+
+        (n.details?'<div style="font-size:11px;color:var(--text3);font-style:italic">'+esc(n.details)+'</div>':'')+
+      '</div>'+
+      '<button onclick="dismissAllNotificationsForMember(\''+memberId+'\')" style="width:100%;padding:6px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);border-radius:4px;cursor:pointer;font-size:12px;color:var(--navy);font-weight:500">Clear All Notifications</button>'+
+    '</div>';
+  }).join("");
+}
+
 function rMySavings(){
   var m=getMyMember();if(!m)return'<div class="card no-data">No member profile linked to your account.</div>';
   var sav=memberTotalSavings(m.id),lk=memberLockedSavings(m.id),av=Math.max(0,sav-lk);
@@ -3103,6 +3135,7 @@ function rMySavings(){
         '<div class="savings-badge"><div style="font-size:10px;color:#9CA3AF">Locked</div><div style="font-size:16px;font-weight:700;color:#F87171;margin-top:4px">'+fmt(lk)+'</div></div>'+
         '<div class="savings-badge"><div style="font-size:10px;color:#9CA3AF">Available</div><div style="font-size:16px;font-weight:700;color:#6EE7B7;margin-top:4px">'+fmt(av)+'</div></div>'+
       '</div></div>'+
+    rMemberNotifications(m.id)+
     '<div class="grid2 member-section">'+
       '<div class="card"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Monthly Contributions</div>'+
         '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Monthly target: <strong>'+fmt(MC)+'</strong></div>'+
@@ -4302,6 +4335,15 @@ function saveSavings(){
     // Add all allocated entries
     S.savings=S.savings.concat(result.savingsToCreate);
     DB.set(K.savings,S.savings);
+    // Create notification with covered months info
+    var monthsList=result.allocation.map(function(a){return MS[a.mo]+" "+a.yr;}).join(", ");
+    var notif = createSavingsNotification(m.id,{
+      amount:result.totalAllocated,
+      monthsCovered:result.monthsCovered,
+      months:result.allocation,
+      nextDueDate:getNextSavingsDueDate(),
+      details:"Advance payment allocated to: "+monthsList
+    });
     logEvent("SAVINGS",S.user.name,"Recorded advance payment "+fmt(amount)+" for "+m.fullName+" allocated to "+result.monthsCovered+" month(s)");
     closeModal();showToast(fmt(amount)+" recorded and spread to "+result.monthsCovered+" month(s)"+(result.unallocated>0?" ("+fmt(result.unallocated)+" unallocated)":""));
   } else {
@@ -4312,6 +4354,14 @@ function saveSavings(){
       amount:amount,date:date,yr:d.getFullYear(),mo:d.getMonth(),ref:ref,notes:noteTxt,by:S.user.username,voided:false,
       isAdvance:false}]);
     DB.set(K.savings,S.savings);
+    // Create notification for single month payment
+    var notif = createSavingsNotification(m.id,{
+      amount:amount,
+      monthsCovered:1,
+      months:[{yr:d.getFullYear(),mo:d.getMonth()}],
+      nextDueDate:getNextSavingsDueDate(),
+      details:"Payment for "+periodLabel
+    });
     logEvent("SAVINGS",S.user.name,"Recorded "+fmt(amount)+" for "+m.fullName);
     closeModal();showToast(fmt(amount)+" recorded for "+m.fullName);
   }
@@ -4373,6 +4423,55 @@ function requestSavingsDelete(sid){
     S.amendments=S.amendments.concat([{id:gid(),savingsId:sid,type:"savings_delete",reason:"Delete request by "+S.user.name,status:"Pending",requestedBy:S.user.name,requestedAt:todayStr(),approvedBy:null,approvedAt:null}]);
     DB.set(K.amendments,S.amendments);logEvent("AMENDMENT",S.user.name,"Savings delete requested: "+sav.ref);showToast("Deletion request submitted for approval","info");
   }
+  render();
+}
+
+// ─── MEMBER NOTIFICATIONS FOR SAVINGS ───────────────────
+function createSavingsNotification(memberId, savingsData){
+  // savingsData can contain multiple months or a single payment
+  // Create persistent notification for member's dashboard
+  var notif={
+    id:gid(),
+    memberId:memberId,
+    type:"savings_credit",
+    createdAt:todayStr(),
+    read:false,
+    amount:savingsData.amount,
+    months:savingsData.months||[],
+    monthsCovered:savingsData.monthsCovered||1,
+    nextDueDate:savingsData.nextDueDate||getNextSavingsDueDate(),
+    details:savingsData.details||""
+  };
+  S.notifications=S.notifications.concat([notif]);
+  DB.set(K.notifications,S.notifications);
+  return notif;
+}
+
+function getNextSavingsDueDate(){
+  var n=now();
+  var nextMonth=n.getMonth()+1;var nextYear=n.getFullYear();
+  if(nextMonth>11){nextMonth=0;nextYear++;}
+  return nextYear+"-"+String(nextMonth+1).padStart(2,"0")+"-01";
+}
+
+function getMemberNotifications(memberId){
+  return S.notifications.filter(function(n){return n.memberId===memberId&&!n.read;});
+}
+
+function dismissNotification(notificationId){
+  var notif=S.notifications.filter(function(n){return n.id===notificationId;})[0];
+  if(notif){
+    notif.read=true;
+    DB.set(K.notifications,S.notifications);
+    render();
+  }
+}
+
+function dismissAllNotificationsForMember(memberId){
+  S.notifications.forEach(function(n){
+    if(n.memberId===memberId&&!n.read)n.read=true;
+  });
+  DB.set(K.notifications,S.notifications);
   render();
 }
 
