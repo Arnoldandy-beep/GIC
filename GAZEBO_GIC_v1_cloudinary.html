@@ -3071,32 +3071,56 @@ function rMemberNotifications(memberId){
   
   return notifs.map(function(n){
     var smartDetails = n.smartDetails || {};
-    
-    // Build notification content based on smart details
-    var fullyCleared = "";
-    if (smartDetails.fullyCoveredMonths && smartDetails.fullyCoveredMonths.length > 0) {
-      var cleared = smartDetails.fullyCoveredMonths.map(function(m) { return MS[m.mo] + " " + m.yr; }).join(", ");
-      fullyCleared = '<div style="margin-bottom:6px;padding:8px;background:rgba(5,122,85,.08);border-left:3px solid var(--green);border-radius:4px;font-size:12px"><strong style="color:var(--green)">✓ Fully Cleared:</strong> ' + cleared + '</div>';
+    var appliedMonths = [];
+    var seen = {};
+
+    if(smartDetails.fullyCoveredMonths&&smartDetails.fullyCoveredMonths.length){
+      smartDetails.fullyCoveredMonths.forEach(function(m){
+        var key=m.yr+"-"+m.mo;
+        if(!seen[key]){seen[key]=1;appliedMonths.push({yr:m.yr,mo:m.mo});}
+      });
     }
-    
-    var partialDetail = "";
-    if (smartDetails.partiallyCoveredMonth) {
-      var partial = smartDetails.partiallyCoveredMonth;
-      partialDetail = '<div style="margin-bottom:6px;padding:8px;background:rgba(249,115,22,.08);border-left:3px solid #F97316;border-radius:4px;font-size:12px"><strong style="color:#F97316">⚠ Partial Credit:</strong> ' + MS[partial.mo] + ' ' + partial.yr + ' — ' + fmt(partial.shortfall) + ' remaining</div>';
+    if(n.months&&n.months.length){
+      n.months.forEach(function(m){
+        var key=m.yr+"-"+m.mo;
+        if(!seen[key]){seen[key]=1;appliedMonths.push({yr:m.yr,mo:m.mo});}
+      });
     }
-    
-    var nextDueText = "";
-    if (smartDetails.nextPaymentStr) {
-      nextDueText = '<div style="margin-bottom:6px;padding:8px;background:rgba(26,86,219,.08);border-left:3px solid var(--blue);border-radius:4px;font-size:12px"><strong style="color:var(--blue)">📅 Next Due:</strong> ' + smartDetails.nextPaymentStr + '</div>';
+    appliedMonths.sort(function(a,b){
+      if(a.yr!==b.yr)return a.yr-b.yr;
+      return a.mo-b.mo;
+    });
+
+    var appliedText=appliedMonths.length
+      ?appliedMonths.map(function(m){return MS[m.mo]+" "+m.yr;}).join(", ")
+      :(n.details?esc(n.details):"This contribution cycle");
+
+    var nextDueLabel="";
+    if(smartDetails.nextPaymentDueMonths&&smartDetails.nextPaymentDueMonths.length){
+      var nd=smartDetails.nextPaymentDueMonths[0];
+      nextDueLabel=MS[nd.mo]+" "+nd.yr;
+    }else if(n.nextDueDate){
+      var ndt=new Date(n.nextDueDate+"T12:00:00");
+      if(!isNaN(ndt.getTime()))nextDueLabel=MS[ndt.getMonth()]+" "+ndt.getFullYear();
     }
+    if(!nextDueLabel&&appliedMonths.length){
+      var last=appliedMonths[appliedMonths.length-1];
+      var mo=last.mo+1,yr=last.yr;
+      if(mo>11){mo=0;yr++;}
+      nextDueLabel=MS[mo]+" "+yr;
+    }
+
+    var appliedBlock='<div style="margin-bottom:6px;padding:8px;background:rgba(5,122,85,.08);border-left:3px solid var(--green);border-radius:4px;font-size:12px"><strong style="color:var(--green)">✓ Applied To:</strong> '+appliedText+'</div>';
+    var nextDueText=nextDueLabel
+      ?'<div style="margin-bottom:6px;padding:8px;background:rgba(26,86,219,.08);border-left:3px solid var(--blue);border-radius:4px;font-size:12px"><strong style="color:var(--blue)">📅 Next Saving Due:</strong> '+nextDueLabel+' (last day of month)</div>'
+      :'';
     
     return'<div class="card" style="border-left:4px solid var(--gold);background:rgba(201,168,76,.05);margin-bottom:12px;overflow:hidden">'+
       '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px">'+
         '<div><div style="font-weight:700;color:var(--gold);font-size:14px">💰 Savings Credit Received</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Deposit of '+fmt(n.amount)+'</div></div>'+
         '<button onclick="dismissNotification(\''+n.id+'\')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:18px;padding:0;margin:-4px 0 0 0">✕</button>'+
       '</div>'+
-      fullyCleared+
-      partialDetail+
+      appliedBlock+
       nextDueText+
       '<button onclick="dismissAllNotificationsForMember(\''+memberId+'\')" style="width:100%;padding:8px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);border-radius:4px;cursor:pointer;font-size:12px;color:var(--navy);font-weight:500;margin-top:4px">Dismiss</button>'+
     '</div>';
