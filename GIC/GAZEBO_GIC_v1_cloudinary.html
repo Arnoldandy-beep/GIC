@@ -3070,28 +3070,35 @@ function rMemberNotifications(memberId){
   if(!notifs.length)return"";
   
   return notifs.map(function(n){
-    var monthsText="";
-    if(n.months&&n.months.length){
-      monthsText=n.months.map(function(m){return MS[m.mo]+" "+m.yr;}).join(", ");
-    }
-    var nextDueDateObj=new Date(n.nextDueDate);
-    var nextDueDateFormatted=fmtD(n.nextDueDate);
+    var smartDetails = n.smartDetails || {};
     
-    return'<div class="card" style="border-left:4px solid var(--gold);background:rgba(201,168,76,.05);margin-bottom:12px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'+
-        '<div style="font-weight:700;color:var(--gold);font-size:14px">💰 Savings Credit Received</div>'+
-        '<button onclick="dismissNotification(\''+n.id+'\')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;padding:0">✕</button>'+
+    // Build notification content based on smart details
+    var fullyCleared = "";
+    if (smartDetails.fullyCoveredMonths && smartDetails.fullyCoveredMonths.length > 0) {
+      var cleared = smartDetails.fullyCoveredMonths.map(function(m) { return MS[m.mo] + " " + m.yr; }).join(", ");
+      fullyCleared = '<div style="margin-bottom:6px;padding:8px;background:rgba(5,122,85,.08);border-left:3px solid var(--green);border-radius:4px;font-size:12px"><strong style="color:var(--green)">✓ Fully Cleared:</strong> ' + cleared + '</div>';
+    }
+    
+    var partialDetail = "";
+    if (smartDetails.partiallyCoveredMonth) {
+      var partial = smartDetails.partiallyCoveredMonth;
+      partialDetail = '<div style="margin-bottom:6px;padding:8px;background:rgba(249,115,22,.08);border-left:3px solid #F97316;border-radius:4px;font-size:12px"><strong style="color:#F97316">⚠ Partial Credit:</strong> ' + MS[partial.mo] + ' ' + partial.yr + ' — ' + fmt(partial.shortfall) + ' remaining</div>';
+    }
+    
+    var nextDueText = "";
+    if (smartDetails.nextPaymentStr) {
+      nextDueText = '<div style="margin-bottom:6px;padding:8px;background:rgba(26,86,219,.08);border-left:3px solid var(--blue);border-radius:4px;font-size:12px"><strong style="color:var(--blue)">📅 Next Due:</strong> ' + smartDetails.nextPaymentStr + '</div>';
+    }
+    
+    return'<div class="card" style="border-left:4px solid var(--gold);background:rgba(201,168,76,.05);margin-bottom:12px;overflow:hidden">'+
+      '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px">'+
+        '<div><div style="font-weight:700;color:var(--gold);font-size:14px">💰 Savings Credit Received</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Deposit of '+fmt(n.amount)+'</div></div>'+
+        '<button onclick="dismissNotification(\''+n.id+'\')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:18px;padding:0;margin:-4px 0 0 0">✕</button>'+
       '</div>'+
-      '<div style="background:white;padding:10px;border-radius:6px;margin-bottom:8px">'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;margin-bottom:6px">'+
-          '<div><div style="color:var(--text3);font-size:11px;text-transform:uppercase">Amount Credited</div><div style="font-weight:700;color:var(--green);font-size:14px;margin-top:2px">'+fmt(n.amount)+'</div></div>'+
-          '<div><div style="color:var(--text3);font-size:11px;text-transform:uppercase">Months Covered</div><div style="font-weight:700;color:var(--navy);font-size:14px;margin-top:2px">'+n.monthsCovered+' month'+(n.monthsCovered!==1?'s':'')+'</div></div>'+
-        '</div>'+
-        (monthsText?'<div style="font-size:11px;color:var(--text2);margin-bottom:6px"><strong>Periods:</strong> '+monthsText+'</div>':'')+
-        '<div style="font-size:11px;color:var(--text2);margin-bottom:6px"><strong>Next Due:</strong> '+nextDueDateFormatted+'</div>'+
-        (n.details?'<div style="font-size:11px;color:var(--text3);font-style:italic">'+esc(n.details)+'</div>':'')+
-      '</div>'+
-      '<button onclick="dismissAllNotificationsForMember(\''+memberId+'\')" style="width:100%;padding:6px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);border-radius:4px;cursor:pointer;font-size:12px;color:var(--navy);font-weight:500">Clear All Notifications</button>'+
+      fullyCleared+
+      partialDetail+
+      nextDueText+
+      '<button onclick="dismissAllNotificationsForMember(\''+memberId+'\')" style="width:100%;padding:8px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);border-radius:4px;cursor:pointer;font-size:12px;color:var(--navy);font-weight:500;margin-top:4px">Dismiss</button>'+
     '</div>';
   }).join("");
 }
@@ -4335,14 +4342,28 @@ function saveSavings(){
     // Add all allocated entries
     S.savings=S.savings.concat(result.savingsToCreate);
     DB.set(K.savings,S.savings);
-    // Create notification with covered months info
+    
+    // Calculate smart notification details
+    var smartDetails = calculateNotificationDetails(m.id, result.allocation, result.totalAllocated);
     var monthsList=result.allocation.map(function(a){return MS[a.mo]+" "+a.yr;}).join(", ");
+    
+    // Build smart notification message
+    var notificationMessage = "";
+    if (smartDetails.fullyCoveredMonths.length > 0) {
+      var coveredMos = smartDetails.fullyCoveredMonths.map(function(m) { return MS[m.mo] + " " + m.yr; }).join(", ");
+      notificationMessage = "Cleared: " + coveredMos;
+    }
+    if (smartDetails.partiallyCoveredMonth) {
+      notificationMessage += (notificationMessage ? " | " : "") + "Partial: " + MS[smartDetails.partiallyCoveredMonth.mo] + " " + smartDetails.partiallyCoveredMonth.yr + " (" + fmt(smartDetails.partiallyCoveredMonth.shortfall) + " remaining)";
+    }
+    
     var notif = createSavingsNotification(m.id,{
       amount:result.totalAllocated,
       monthsCovered:result.monthsCovered,
       months:result.allocation,
       nextDueDate:getNextSavingsDueDate(),
-      details:"Advance payment allocated to: "+monthsList
+      details:monthsList,
+      smartDetails: smartDetails
     });
     logEvent("SAVINGS",S.user.name,"Recorded advance payment "+fmt(amount)+" for "+m.fullName+" allocated to "+result.monthsCovered+" month(s)");
     closeModal();showToast(fmt(amount)+" recorded and spread to "+result.monthsCovered+" month(s)"+(result.unallocated>0?" ("+fmt(result.unallocated)+" unallocated)":""));
@@ -4354,13 +4375,43 @@ function saveSavings(){
       amount:amount,date:date,yr:d.getFullYear(),mo:d.getMonth(),ref:ref,notes:noteTxt,by:S.user.username,voided:false,
       isAdvance:false}]);
     DB.set(K.savings,S.savings);
-    // Create notification for single month payment
+    
+    // Create notification for single month payment with smart details
+    var singleSmartDetails = {
+      fullyCoveredMonths: amount >= MC ? [{yr:d.getFullYear(),mo:d.getMonth()}] : [],
+      partiallyCoveredMonth: amount < MC ? {yr:d.getFullYear(),mo:d.getMonth(),amount:amount,shortfall:MC-amount} : null,
+      nextPaymentDueMonths: [],
+      nextPaymentStr: "",
+      depositAmount: amount
+    };
+    
+    // Calculate next due month
+    if (amount >= MC) {
+      var nextMo = d.getMonth() + 1;
+      var nextYr = d.getFullYear();
+      if (nextMo > 11) {
+        nextMo = 0;
+        nextYr++;
+      }
+      singleSmartDetails.nextPaymentDueMonths.push({yr:nextYr,mo:nextMo});
+      singleSmartDetails.nextPaymentStr = MS[nextMo] + " " + nextYr;
+    } else {
+      var nextMo = d.getMonth() + 1;
+      var nextYr = d.getFullYear();
+      if (nextMo > 11) {
+        nextMo = 0;
+        nextYr++;
+      }
+      singleSmartDetails.nextPaymentStr = "Balance on " + periodLabel + " (" + fmt(MC - amount) + ") + " + MS[nextMo] + " " + nextYr;
+    }
+    
     var notif = createSavingsNotification(m.id,{
       amount:amount,
       monthsCovered:1,
       months:[{yr:d.getFullYear(),mo:d.getMonth()}],
       nextDueDate:getNextSavingsDueDate(),
-      details:"Payment for "+periodLabel
+      details:"Payment for "+periodLabel,
+      smartDetails: singleSmartDetails
     });
     logEvent("SAVINGS",S.user.name,"Recorded "+fmt(amount)+" for "+m.fullName);
     closeModal();showToast(fmt(amount)+" recorded for "+m.fullName);
@@ -4427,6 +4478,67 @@ function requestSavingsDelete(sid){
 }
 
 // ─── MEMBER NOTIFICATIONS FOR SAVINGS ───────────────────
+// ─── SMART NOTIFICATION HELPER ──────────────────────
+function calculateNotificationDetails(memberId, allocation, totalAmount) {
+  // Determine which months are FULLY covered, partially covered, and next due
+  var fullyCoveredMonths = [];
+  var partiallyCoveredMonth = null;
+  var nextPaymentDueMonths = [];
+  
+  allocation.forEach(function(a) {
+    if (a.amount >= MC) {
+      fullyCoveredMonths.push({yr: a.yr, mo: a.mo});
+    } else if (a.amount > 0) {
+      // Partial payment (not full MC)
+      partiallyCoveredMonth = {yr: a.yr, mo: a.mo, amount: a.amount, shortfall: MC - a.amount};
+    }
+  });
+  
+  // Calculate next payment due date (month after last fully covered)
+  if (fullyCoveredMonths.length > 0) {
+    var lastFull = fullyCoveredMonths[fullyCoveredMonths.length - 1];
+    var nextMo = lastFull.mo + 1;
+    var nextYr = lastFull.yr;
+    if (nextMo > 11) {
+      nextMo = 0;
+      nextYr++;
+    }
+    nextPaymentDueMonths.push({yr: nextYr, mo: nextMo});
+  }
+  
+  // If there's a partial month, that's part of next payment due
+  if (partiallyCoveredMonth && fullyCoveredMonths.length === allocation.length - 1) {
+    // Partial is the last in allocation, so next payment starts from next month
+    var nextMo = partiallyCoveredMonth.mo + 1;
+    var nextYr = partiallyCoveredMonth.yr;
+    if (nextMo > 11) {
+      nextMo = 0;
+      nextYr++;
+    }
+    if (!nextPaymentDueMonths.some(function(m) { return m.yr === nextYr && m.mo === nextMo; })) {
+      nextPaymentDueMonths.push({yr: nextYr, mo: nextMo});
+    }
+  }
+  
+  // Build next payment due string
+  var nextPaymentStr = "";
+  if (nextPaymentDueMonths.length > 0) {
+    var nextMonth = nextPaymentDueMonths[0];
+    nextPaymentStr = MS[nextMonth.mo] + " " + nextMonth.yr;
+    if (partiallyCoveredMonth) {
+      nextPaymentStr = "Balance on " + MS[partiallyCoveredMonth.mo] + " " + partiallyCoveredMonth.yr + " (" + fmt(partiallyCoveredMonth.shortfall) + ") + " + nextPaymentStr;
+    }
+  }
+  
+  return {
+    fullyCoveredMonths: fullyCoveredMonths,
+    partiallyCoveredMonth: partiallyCoveredMonth,
+    nextPaymentDueMonths: nextPaymentDueMonths,
+    nextPaymentStr: nextPaymentStr,
+    depositAmount: totalAmount
+  };
+}
+
 function createSavingsNotification(memberId, savingsData){
   // savingsData can contain multiple months or a single payment
   // Create persistent notification for member's dashboard
@@ -4440,7 +4552,8 @@ function createSavingsNotification(memberId, savingsData){
     months:savingsData.months||[],
     monthsCovered:savingsData.monthsCovered||1,
     nextDueDate:savingsData.nextDueDate||getNextSavingsDueDate(),
-    details:savingsData.details||""
+    details:savingsData.details||"",
+    smartDetails:savingsData.smartDetails||null
   };
   S.notifications=S.notifications.concat([notif]);
   DB.set(K.notifications,S.notifications);
