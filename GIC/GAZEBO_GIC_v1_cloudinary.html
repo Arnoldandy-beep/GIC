@@ -3088,10 +3088,23 @@ function rMemberNotifications(memberId){
       var pkey=pm.yr+"-"+pm.mo;
       if(!seenPartial[pkey]){seenPartial[pkey]=1;partialMonths.push({yr:pm.yr,mo:pm.mo});}
     }
+    var inferredAllocByMonth={};
+    if(n.months&&n.months.length&&typeof n.amount==="number"){
+      var orderedMonths=n.months.slice().sort(function(a,b){return a.yr!==b.yr?a.yr-b.yr:a.mo-b.mo;});
+      var rem=n.amount;
+      orderedMonths.forEach(function(m){
+        if(rem<=0)return;
+        var inf=Math.min(MC,rem);
+        inferredAllocByMonth[m.yr+"-"+m.mo]=inf;
+        rem-=inf;
+      });
+    }
+
     if(n.months&&n.months.length){
       n.months.forEach(function(m){
         var key=m.yr+"-"+m.mo;
-        if(typeof m.amount==="number"&&m.amount<MC){
+        var amt=(typeof m.amount==="number")?m.amount:inferredAllocByMonth[key];
+        if(typeof amt==="number"&&amt<MC){
           if(!seenPartial[key]){seenPartial[key]=1;partialMonths.push({yr:m.yr,mo:m.mo});}
         }else if(!seenFull[key]&&!seenPartial[key]){
           seenFull[key]=1;fullMonths.push({yr:m.yr,mo:m.mo});
