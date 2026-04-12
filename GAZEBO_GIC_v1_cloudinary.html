@@ -2753,16 +2753,18 @@ function rLoanList(){
         '<div style="font-size:10px;color:var(--text3);margin-top:2px">SACCO/Cooperative standard · Updates after every loan & repayment</div></div>'+
       '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:'+(lf.available>0?"var(--green)":"var(--red)")+'">'+ fmt(lf.available)+'</div>'+
         '<div style="font-size:10px;color:var(--text3)">Available to deploy</div></div></div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:10px">'+
-      [['📤 Deployed Active Loans',fmt(portfolio.outstandingPrincipal),'var(--red)','goLoanListFilter(\'active\',\'outstanding\')'],
-       ['🏦 Outstanding Interest on Active Loans',fmt(portfolio.interestActive),'var(--gold2)','goLoanListFilter(\'active\',\'interest-pending\')'],
-       ['🧾 TOTAL LOANS INTEREST',fmt(portfolio.interestCollectedAll),'var(--navy)','goLoanListFilter(\'all\',\'interest-collected\')'],
-       ['💼 Principal on All Loans',fmt(totalPrincipalAllLoans),'var(--navy)','goLoanListFilter(\'all\',\'all\')'],
-       ['✅ Closed Loans',portfolio.closedLoanCount+' loan(s)','var(--green)','goLoanListFilter(\'cleared\',\'all\')'],
-       ['🏁 Interest on Closed Loans',fmt(portfolio.interestClosed),'var(--green)','goLoanListFilter(\'cleared\',\'interest-cleared\')']].map(function(x){
-        return'<button type="button" class="btn" onclick="'+x[3]+'" style="background:var(--bg);border:1px solid var(--gray2);border-radius:8px;padding:10px 12px;text-align:left;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:8px;min-height:84px;line-height:1.25;white-space:normal;word-break:break-word;overflow-wrap:anywhere">'+
-          '<div style="font-size:11px;color:var(--text3);font-weight:700;line-height:1.25">'+x[0]+'</div>'+
-          '<div style="font-size:15px;font-weight:800;color:'+x[2]+';line-height:1.2;margin-top:auto">'+x[1]+'</div></button>';}).join("")+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:stretch;margin-bottom:10px">'+
+      [['Deployed Active Loans',fmt(portfolio.outstandingPrincipal),'var(--red)','goLoanListFilter(\'active\',\'outstanding\')','📤','linear-gradient(135deg,#FEE2E2,#FECACA)'],
+       ['Outstanding Interest on Active Loans',fmt(portfolio.interestActive),'#0F766E','goLoanListFilter(\'active\',\'interest-pending\')','💹','linear-gradient(135deg,#CCFBF1,#99F6E4)'],
+       ['TOTAL LOANS INTEREST',fmt(portfolio.interestCollectedAll),'#0F766E','goLoanListFilter(\'all\',\'interest-collected\')','🧾','linear-gradient(135deg,#CCFBF1,#99F6E4)'],
+       ['Principal on All Loans',fmt(totalPrincipalAllLoans),'var(--navy)','goLoanListFilter(\'all\',\'all\')','💼','linear-gradient(135deg,#DBEAFE,#BFDBFE)'],
+       ['Closed Loans',portfolio.closedLoanCount+' loan(s)','var(--green)','goLoanListFilter(\'cleared\',\'all\')','✅','linear-gradient(135deg,#DCFCE7,#BBF7D0)'],
+       ['Interest on Closed Loans',fmt(portfolio.interestClosed),'#0F766E','goLoanListFilter(\'cleared\',\'interest-cleared\')','🏁','linear-gradient(135deg,#CCFBF1,#99F6E4)']].map(function(x){
+        var isInterestTile=(x[0].indexOf('Interest')>=0);
+        return'<button type="button" class="btn" onclick="'+x[3]+'" style="background:linear-gradient(180deg,#FFFFFF,var(--bg));border:1px solid var(--gray2);border-radius:12px;padding:10px 12px;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;min-height:104px;line-height:1.25;white-space:normal;word-break:break-word;overflow-wrap:anywhere;box-shadow:0 6px 18px rgba(15,23,42,.06)">'+
+          '<div style="width:30px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:'+x[5]+';font-size:15px;box-shadow:inset 0 0 0 1px rgba(15,23,42,.08)">'+x[4]+'</div>'+
+          '<div style="font-size:11px;color:var(--text3);font-weight:700;line-height:1.25;max-width:95%">'+x[0]+'</div>'+
+          '<div style="font-size:16px;font-weight:900;color:'+(isInterestTile?'#0F766E':x[2])+';line-height:1.15;margin-top:2px">'+x[1]+'</div></button>';}).join("")+
     '</div>'+
     '<div style="margin-bottom:6px">'+
       '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
