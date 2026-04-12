@@ -1587,8 +1587,10 @@ function calcLoanPortfolioTotals(asOfDate){
   var activeLoans=S.loans.filter(function(l){return l.status==="Active";});
   var closedLoans=S.loans.filter(function(l){return l.status==="Cleared";});
   var pendingLoans=S.loans.filter(function(l){return l.status==="Pending";});
+  var nonDeclinedLoans=S.loans.filter(function(l){return l.status!=="Declined";});
   var activeStats=activeLoans.map(function(l){return{loan:l,stat:loanStat(l,asOfDate)};});
   var closedStats=closedLoans.map(function(l){return{loan:l,stat:loanStat(l,asOfDate)};});
+  var nonDeclinedStats=nonDeclinedLoans.map(function(l){return{loan:l,stat:loanStat(l,asOfDate)};});
   var deployedPrincipal=activeLoans.reduce(function(t,l){return t+(Number(l.principal)||0);},0);
   var recoveredPrincipal=activeStats.reduce(function(t,x){return t+x.stat.paidPrincipal;},0);
   var outstandingPrincipal=activeStats.reduce(function(t,x){return t+x.stat.outstandingPrincipal;},0);
@@ -1596,6 +1598,7 @@ function calcLoanPortfolioTotals(asOfDate){
   var interestReceivable=activeStats.reduce(function(t,x){return t+x.stat.outstandingInterest;},0);
   var interestActive=activeStats.reduce(function(t,x){return t+x.stat.outstandingInterest;},0);
   var interestClosed=closedStats.reduce(function(t,x){return t+x.stat.configuredInterest;},0);
+  var interestAllLoans=nonDeclinedStats.reduce(function(t,x){return t+x.stat.totalInterestDue;},0);
   var overdueStats=activeStats.filter(function(x){return isOverdue(x.loan);});
   var overdueInterest=overdueStats.reduce(function(t,x){return t+x.stat.outstandingInterest;},0);
   var cashAvailable=savingsPool-outstandingPrincipal;
@@ -1611,6 +1614,7 @@ function calcLoanPortfolioTotals(asOfDate){
     interestReceivable:interestReceivable,
     interestActive:interestActive,
     interestClosed:interestClosed,
+    interestAllLoans:interestAllLoans,
     overdueInterest:overdueInterest,
     availableCash:Math.max(0,cashAvailable)
   };
@@ -2751,6 +2755,7 @@ function rLoanList(){
       [['📤 Deployed Active Loans',fmt(portfolio.outstandingPrincipal),'var(--red)','goLoanListFilter(\'active\',\'outstanding\')'],
        ['🏦 Outstanding Interest on Active Loans',fmt(portfolio.interestActive),'var(--gold2)','goLoanListFilter(\'active\',\'interest-pending\')'],
        ['🚨 Outstanding Interest on Overdue Loans',fmt(portfolio.overdueInterest),'var(--red)','goLoanListFilter(\'active\',\'overdue\')'],
+       ['🧮 Total Interest (All Loans)',fmt(portfolio.interestAllLoans),'var(--navy)','goLoanListFilter(\'all\',\'all\')'],
        ['💼 Principal on All Loans',fmt(totalPrincipalAllLoans),'var(--navy)','goLoanListFilter(\'all\',\'all\')'],
        ['✅ Closed Loans',portfolio.closedLoanCount+' loan(s)','var(--green)','goLoanListFilter(\'cleared\',\'all\')'],
        ['🏁 Interest on Closed Loans',fmt(portfolio.interestClosed),'var(--green)','goLoanListFilter(\'cleared\',\'interest-cleared\')']].map(function(x){
@@ -3278,8 +3283,27 @@ function rMySavings(){
 
 function rMyLoans(){
   var m=getMyMember();if(!m)return'<div class="card no-data">No member profile linked.</div>';
-  var myLoans=S.loans.filter(function(l){return l.memberId===m.id||l.g1Id===m.id||l.g2Id===m.id;});
-  var borrowedLoans=myLoans.filter(function(l){return l.memberId===m.id;});
+  function normPerson(v){return String(v||"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
+  var myNo=normPerson(m.no);
+  var myName=normPerson(m.fullName);
+  function isBorrowerMatch(l){
+    if(l.memberId===m.id)return true;
+    if(l.memberNo&&normPerson(l.memberNo)===myNo)return true;
+    if(!l.memberId){
+      var b=normPerson(l.borrower);
+      if(b&&b===myName)return true;
+      if(b&&myNo&&b.indexOf(myNo)>=0)return true;
+    }
+    return false;
+  }
+  function isGuarantorMatch(l){
+    if(l.g1Id===m.id||l.g2Id===m.id)return true;
+    if(!l.g1Id&&normPerson(l.g1Name)===myName)return true;
+    if(!l.g2Id&&normPerson(l.g2Name)===myName)return true;
+    return false;
+  }
+  var myLoans=S.loans.filter(function(l){return isBorrowerMatch(l)||isGuarantorMatch(l);});
+  var borrowedLoans=myLoans.filter(function(l){return isBorrowerMatch(l);});
   return'<div class="fadein">'+
     renderUserAttentionAlerts(S.user)+
     '<div class="page-hdr"><h1 class="fd page-title">My Loans</h1></div>'+
@@ -3305,15 +3329,16 @@ function rMyLoans(){
       '</div>';
     }).join(""):
     '<div class="card" style="text-align:center;padding:32px;color:var(--text3)"><div style="font-size:32px;margin-bottom:10px">✅</div><div style="font-weight:600;color:var(--navy);margin-bottom:4px">No Loan Requests Yet</div><div style="font-size:12px">You currently have no loans in the system.</div></div>')+
-    (myLoans.filter(function(l){return l.g1Id===m.id||l.g2Id===m.id;}).length?
+    (myLoans.filter(function(l){return isGuarantorMatch(l);}).length?
       '<div class="card" style="margin-top:12px"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase">Loans I\'m Guaranteeing</div>'+
         '<div class="mobile-stack"><table class="tbl tbl-sm"><thead><tr><th>Loan No.</th><th>Borrower</th><th>Amount</th><th>Status</th><th>My Role</th><th style="white-space:normal;min-width:120px">Locked Savings</th></tr></thead><tbody>'+
-        myLoans.filter(function(l){return l.g1Id===m.id||l.g2Id===m.id;}).map(function(l){
+        myLoans.filter(function(l){return isGuarantorMatch(l);}).map(function(l){
           var lst=loanStat(l),lover=isOverdue(l);
           var lstatus=l.status==="Pending"?"Pending Approval":l.status==="Declined"?"Declined":l.status==="Cleared"?"Closed":lover?"Overdue":"Active";
           var lcls=l.status==="Declined"?"danger":l.status==="Pending"?"warning":l.status==="Cleared"?"success":lover?"danger":"info";
-          var myLocked=l.g1Id===m.id?(l.lockedG1||0):(l.lockedG2||0);
-          return'<tr><td data-label="Loan No." class="mono" style="font-size:11px;color:var(--gold)">'+l.no+'</td><td data-label="Borrower">'+esc(l.borrower)+'</td><td data-label="Amount">'+fmt(l.principal)+'</td><td data-label="Status"><span class="bdg bdg-'+lcls+'" style="font-size:10px">'+lstatus+'</span></td><td data-label="My Role"><span class="bdg bdg-info" style="font-size:10px">'+(l.g1Id===m.id?"Guarantor 1":"Guarantor 2")+'</span></td><td data-label="Locked Savings" class="red-text" style="font-weight:600">'+fmt(myLocked)+'</td></tr>';}).join("")+
+          var isG1=l.g1Id===m.id||(!l.g1Id&&normPerson(l.g1Name)===myName);
+          var myLocked=isG1?(l.lockedG1||0):(l.lockedG2||0);
+          return'<tr><td data-label="Loan No." class="mono" style="font-size:11px;color:var(--gold)">'+l.no+'</td><td data-label="Borrower">'+esc(l.borrower)+'</td><td data-label="Amount">'+fmt(l.principal)+'</td><td data-label="Status"><span class="bdg bdg-'+lcls+'" style="font-size:10px">'+lstatus+'</span></td><td data-label="My Role"><span class="bdg bdg-info" style="font-size:10px">'+(isG1?"Guarantor 1":"Guarantor 2")+'</span></td><td data-label="Locked Savings" class="red-text" style="font-weight:600">'+fmt(myLocked)+'</td></tr>';}).join("")+
         '</tbody></table></div>'+
         '<div class="alert alert-info" style="margin-top:10px;font-size:11px">Your locked savings are released when the guaranteed loan is fully repaid.</div>'+
       '</div>':"")+'</div>';
