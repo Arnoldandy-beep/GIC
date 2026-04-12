@@ -2979,6 +2979,7 @@ function rReports(){
     '<div class="fl" style="gap:8px;flex-wrap:wrap">'+
       '<button class="btn btn-p btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>'+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'restore-loans\'};render()">♻️ Restore Loans Backup</button>':'')+
+      (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreLoansFromAuditLog()">🧾 Recover Loans From Audit</button>':'')+
       (canClearData?'<button class="btn btn-d btn-sm" onclick="clearAllHavingsData()">🧹 Clear all savings/loan/expense data</button>':'')+
     '</div></div>'+
     '<div class="grid4" style="margin-bottom:14px">'+
@@ -4034,8 +4035,9 @@ function mRestoreLoans(){
         '<div class="full"><label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox" id="restore-loans-replace" checked> Replace current loans and repayments with backup contents</label></div>'+
       '</div>'+
       '<div class="alert alert-info" style="font-size:12px;margin-top:10px">After restore, your new repayment logic remains active: installment pays interest first, and interest-only mode is available.</div>'+
+      '<div class="alert alert-warn" style="font-size:12px;margin-top:10px">No backup file? Use <strong>Recover From Audit</strong> to rebuild best-effort loan history from system audit logs.</div>'+
     '</div>'+
-    mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="restoreLoansFromBackup()">♻️ Restore Now</button>');
+    mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-g" onclick="restoreLoansFromAuditLog()">🧾 Recover From Audit</button><button class="btn btn-p" onclick="restoreLoansFromBackup()">♻️ Restore Now</button>');
 }
 
 // ─── 29. ACTIONS ───────────────────────────────────
@@ -4142,6 +4144,93 @@ async function restoreLoansFromBackup(){
   }catch(e){
     console.error("Restore failed",e);
     showToast("Restore failed: "+(e.message||"unknown error"),"err");
+  }
+}
+
+function parseAuditCurrency(text){
+  var n=Number(String(text||"").replace(/[^\d.-]/g,""));
+  return Number.isFinite(n)?n:0;
+}
+async function restoreLoansFromAuditLog(){
+  if(!confirm("Rebuild loans and repayments from audit log? This will replace current loan and repayment records with best-effort recovered data."))return;
+  try{
+    var logs=await DB.get("gic:auditlog");
+    if(!Array.isArray(logs)||!logs.length)logs=_store.get("gic:auditlog")||[];
+    if(!logs.length){showToast("No audit logs available for recovery","err");return;}
+    var ordered=logs.slice().sort(function(a,b){return String(a.ts||"").localeCompare(String(b.ts||""));});
+    var loansByNo={};
+    var repayments=[];
+
+    ordered.forEach(function(e){
+      var detail=String(e&&e.detail||"");
+      var type=String(e&&e.type||"");
+      var evtDate=(e&&e.ts)?String(e.ts).split("T")[0]:todayStr();
+
+      if(type==="LOAN"){
+        var sub=detail.match(/(?:Historical\s+loan|Loan)\s+([A-Z0-9-]+)\s+submitted\s+for\s+(.+?)\s+—\s+(.+?)\s+×\s*(\d+)mo\.\s*Status:\s*([A-Za-z]+)/i);
+        if(sub){
+          var no=sub[1],borrower=sub[2],principal=parseAuditCurrency(sub[3]),months=Math.max(1,Number(sub[4])||6),status=sub[5]||"Active";
+          if(!loansByNo[no]){
+            loansByNo[no]={
+              id:gid(),no:no,memberId:null,borrower:borrower,isMember:true,
+              principal:principal,rate:MEM_RATE,months:months,purpose:"Recovered from audit log",issued:evtDate,
+              g1Id:"",g1Name:"",g2Id:"",g2Name:"",collateralDesc:"",collateralValue:0,
+              lockedBorrower:0,lockedG1:0,lockedG2:0,approvals:[],requiredApprovals:loanApprovalThreshold(),approvedBy:"Audit Recovery",
+              status:status,declineReason:"",submittedBy:"system",submittedAt:evtDate,isHistorical:true,
+              manualRealizedInterest:null,manualPaidTotal:0,approvedAt:evtDate,disbursedAt:evtDate,clearedAt:""
+            };
+          }
+          loansByNo[no].status=status;
+          return;
+        }
+        var decl=detail.match(/Loan\s+([A-Z0-9-]+)\s+DECLINED/i);
+        if(decl&&loansByNo[decl[1]])loansByNo[decl[1]].status="Declined";
+      }
+
+      if(type==="REPAYMENT"){
+        var rep=detail.match(/Repayment\s+(.+?)\s+posted\s+on\s+([A-Z0-9-]+)\s+as\s+([a-z-]+)/i);
+        if(rep){
+          var amount=parseAuditCurrency(rep[1]);
+          var loanNo=rep[2];
+          var mode=rep[3]||"installment";
+          var iMatch=detail.match(/interest\s+(.+?),/i);
+          var pMatch=detail.match(/principal\s+(.+?),/i);
+          var intComp=iMatch?parseAuditCurrency(iMatch[1]):0;
+          var priComp=pMatch?parseAuditCurrency(pMatch[1]):Math.max(0,amount-intComp);
+          if(!loansByNo[loanNo]){
+            loansByNo[loanNo]={id:gid(),no:loanNo,memberId:null,borrower:"Recovered Borrower",isMember:true,principal:Math.max(priComp,100000),rate:MEM_RATE,months:6,purpose:"Recovered from audit log",issued:evtDate,g1Id:"",g1Name:"",g2Id:"",g2Name:"",collateralDesc:"",collateralValue:0,lockedBorrower:0,lockedG1:0,lockedG2:0,approvals:[],requiredApprovals:loanApprovalThreshold(),approvedBy:"Audit Recovery",status:"Active",declineReason:"",submittedBy:"system",submittedAt:evtDate,isHistorical:true,manualRealizedInterest:null,manualPaidTotal:0,approvedAt:evtDate,disbursedAt:evtDate,clearedAt:""};
+          }
+          repayments.push({id:gid(),loanNo:loanNo,amount:amount,date:evtDate,notes:"Recovered from audit log",ref:"RPY-REC-"+String(repayments.length+1).padStart(3,"0"),by:"system",paymentMode:mode,interestComponent:intComp,principalComponent:priComp});
+          return;
+        }
+        var clr=detail.match(/Loan\s+([A-Z0-9-]+)\s+fully\s+cleared\s+via\s+([a-z-]+)\s+payment\.\s+Principal\s+recovered:\s+(.+?),\s+interest\s+received:\s+(.+?)(?:,|$)/i);
+        if(clr){
+          var cNo=clr[1],cMode=clr[2]||"installment",cPri=parseAuditCurrency(clr[3]),cInt=parseAuditCurrency(clr[4]),cAmt=cPri+cInt;
+          if(!loansByNo[cNo]){
+            loansByNo[cNo]={id:gid(),no:cNo,memberId:null,borrower:"Recovered Borrower",isMember:true,principal:Math.max(cPri,100000),rate:MEM_RATE,months:6,purpose:"Recovered from audit log",issued:evtDate,g1Id:"",g1Name:"",g2Id:"",g2Name:"",collateralDesc:"",collateralValue:0,lockedBorrower:0,lockedG1:0,lockedG2:0,approvals:[],requiredApprovals:loanApprovalThreshold(),approvedBy:"Audit Recovery",status:"Active",declineReason:"",submittedBy:"system",submittedAt:evtDate,isHistorical:true,manualRealizedInterest:null,manualPaidTotal:0,approvedAt:evtDate,disbursedAt:evtDate,clearedAt:""};
+          }
+          loansByNo[cNo].status="Cleared";
+          loansByNo[cNo].clearedAt=evtDate;
+          repayments.push({id:gid(),loanNo:cNo,amount:cAmt,date:evtDate,notes:"Recovered from audit log",ref:"RPY-REC-"+String(repayments.length+1).padStart(3,"0"),by:"system",paymentMode:cMode,interestComponent:cInt,principalComponent:cPri});
+        }
+      }
+    });
+
+    var recoveredLoans=Object.keys(loansByNo).map(function(no){return loansByNo[no];});
+    if(!recoveredLoans.length){showToast("No recoverable loan entries found in audit log","err");return;}
+    var loanIdByNo={};recoveredLoans.forEach(function(l){loanIdByNo[l.no]=l.id;});
+    var recoveredRepayments=repayments.map(function(r){return Object.assign({},r,{loanId:loanIdByNo[r.loanNo]||""});}).filter(function(r){return !!r.loanId;}).map(function(r){delete r.loanNo;return r;});
+
+    S.loans=recoveredLoans;
+    S.repayments=recoveredRepayments;
+    await DB.set(K.loans,S.loans);
+    await DB.set(K.repayments,S.repayments);
+    logEvent("CONFIG",S.user?S.user.name:"System","Loans recovered from audit log: "+recoveredLoans.length+" loans, "+recoveredRepayments.length+" repayments");
+    S.page="loans";S.view="list";S.loanTab="all";S.loanMetricFilter="all";
+    closeModal();showToast("Recovered from audit: "+recoveredLoans.length+" loans, "+recoveredRepayments.length+" repayments","ok");render();
+  }catch(e){
+    console.error("Audit recovery failed",e);
+    showToast("Audit recovery failed: "+(e.message||"unknown error"),"err");
   }
 }
 function goMemberDetail(id){pushNav();S.page="members";S.view="member-detail";S.selId=id;render();}
