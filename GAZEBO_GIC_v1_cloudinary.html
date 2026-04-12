@@ -2747,16 +2747,16 @@ function rLoanList(){
         '<div style="font-size:10px;color:var(--text3);margin-top:2px">SACCO/Cooperative standard · Updates after every loan & repayment</div></div>'+
       '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:'+(lf.available>0?"var(--green)":"var(--red)")+'">'+ fmt(lf.available)+'</div>'+
         '<div style="font-size:10px;color:var(--text3)">Available to deploy</div></div></div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:10px">'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:10px">'+
       [['📤 Deployed Active Loans',fmt(portfolio.outstandingPrincipal),'var(--red)','goLoanListFilter(\'active\',\'outstanding\')'],
        ['🏦 Total Interest on Active Loans',fmt(portfolio.interestActive),'var(--gold2)','goLoanListFilter(\'active\',\'interest-pending\')'],
        ['🚨 Interest on Overdue Loans',fmt(portfolio.overdueInterest),'var(--red)','goLoanListFilter(\'active\',\'overdue\')'],
        ['💼 Principal on All Loans',fmt(totalPrincipalAllLoans),'var(--navy)','goLoanListFilter(\'all\',\'all\')'],
        ['✅ Closed Loans',portfolio.closedLoanCount+' loan(s)','var(--green)','goLoanListFilter(\'cleared\',\'all\')'],
        ['🏁 Interest on Closed Loans',fmt(portfolio.interestClosed),'var(--green)','goLoanListFilter(\'cleared\',\'interest-cleared\')']].map(function(x){
-        return'<button type="button" class="btn" onclick="'+x[3]+'" style="background:var(--bg);border:1px solid var(--gray2);border-radius:8px;padding:8px 10px;text-align:left">'+
-          '<div style="font-size:10px;color:var(--text3);font-weight:600">'+x[0]+'</div>'+
-          '<div style="font-size:13px;font-weight:700;color:'+x[2]+';margin-top:2px">'+x[1]+'</div></button>';}).join("")+
+        return'<button type="button" class="btn" onclick="'+x[3]+'" style="background:var(--bg);border:1px solid var(--gray2);border-radius:8px;padding:10px 12px;text-align:left;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:8px;min-height:84px;line-height:1.25;white-space:normal;word-break:break-word;overflow-wrap:anywhere">'+
+          '<div style="font-size:11px;color:var(--text3);font-weight:700;line-height:1.25">'+x[0]+'</div>'+
+          '<div style="font-size:15px;font-weight:800;color:'+x[2]+';line-height:1.2;margin-top:auto">'+x[1]+'</div></button>';}).join("")+
     '</div>'+
     '<div style="margin-bottom:6px">'+
       '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
