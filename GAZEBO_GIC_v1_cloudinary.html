@@ -817,7 +817,7 @@ var S={
   lockouts:{},loading:true,toast:null,realtimeListenersActive:false,
   memberSearch:"",memberStatusFilter:"Active",
   finesFilter:"all",
-  savTab:"overview",savMemberId:"",loanTab:"all",loanMetricFilter:"all",intTab:"overview",expTab:"list",
+  savTab:"overview",savMemberId:"",loanTab:"all",loanMetricFilter:"all",loanSortBy:"",loanSortDir:"asc",intTab:"overview",expTab:"list",
   usersTab:"admin"
 };
 var _memberFormUploadDraft={passportPhoto:"",nidCopy:"",nidCopyName:"",nidCopyType:""};
@@ -1528,6 +1528,7 @@ function loanSecurityCheck(bid,g1,g2,total){
 }
 function calcLoanLockAllocation(sec,total){
   var required=Math.max(0,Number(total)||0);
+  // Borrower savings are locked first; guarantors cover only overflow in near-equal shares.
   var borrowerLock=Math.min(Math.max(0,Number(sec&&sec.bSav)||0),required);
   var guarantorRequired=Math.max(0,required-borrowerLock);
   var g1Avail=Math.max(0,Number(sec&&sec.g1Sav)||0);
@@ -2761,7 +2762,33 @@ function rLoanList(){
   var principalPending=pendingOrActiveStats.reduce(function(t,x){return t+x.st.outstandingPrincipal;},0);
   var principalCleared=clearedStats.reduce(function(t,x){return t+x.st.paidPrincipal;},0);
 
-  var rows=filtered.map(function(loan){
+  var statusRank={"Pending":1,"Active":2,"Cleared":3,"Declined":4};
+  function sortVal(loan,key){
+    var st=loanStat(loan);
+    if(key==="no")return String(loan.no||"");
+    if(key==="borrower")return String(loan.borrower||"");
+    if(key==="principal")return Number(loan.principal||0);
+    if(key==="interest")return Number(st.totalInterestDue||0);
+    if(key==="rate")return Number(loan.rate||0);
+    if(key==="due")return String(loanDueDate(loan.issued,loan.months)||"");
+    if(key==="outstanding")return Number(st.outstanding||0);
+    if(key==="status")return Number(statusRank[loan.status]||99);
+    return String(loan.no||"");
+  }
+  function cmp(a,b,key){
+    var av=sortVal(a,key),bv=sortVal(b,key);
+    if(typeof av==="number"&&typeof bv==="number")return av-bv;
+    return String(av).localeCompare(String(bv));
+  }
+  var sortedFiltered=filtered.slice();
+  if(S.loanSortBy){
+    sortedFiltered.sort(function(a,b){
+      var base=cmp(a,b,S.loanSortBy);
+      if(base===0)base=cmp(a,b,"no");
+      return (S.loanSortDir||"asc")==="desc"?-base:base;
+    });
+  }
+  var rows=sortedFiltered.map(function(loan){
     var st=loanStat(loan),over=isOverdue(loan);
     var interestDone=loan.status==="Active"&&st.totalInterestDue>0&&st.outstandingInterest<=0;
     return'<tr onclick="goLoanDetail(\''+loan.id+'\')" style="cursor:pointer">'+
@@ -2776,6 +2803,13 @@ function rLoanList(){
       (showActions?'<td data-label="Actions">'+(canUserApproveLoan(loan,S.user)?'<div class="fl"><button class="btn btn-grn btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();approveLoan(\''+loan.id+'\')">✅ Approve</button><button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button></div>':loan.status==="Pending"&&hasUserApprovedLoan(loan,S.user&&S.user.id)?'<span class="bdg bdg-success">Approved</span>':loan.status==="Pending"?'<button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button>':"—")+'</td>':"")+
       '</tr>';
   }).join("");
+  function sortArrow(key){
+    if((S.loanSortBy||"")!==key)return "";
+    return (S.loanSortDir||"asc")==="desc"?" ▼":" ▲";
+  }
+  function sortBtn(key,label){
+    return '<button class="btn" type="button" onclick="setLoanSort(\''+key+'\')" style="padding:0;border:none;background:none;font:inherit;font-weight:700;color:inherit;cursor:pointer">'+label+sortArrow(key)+'</button>';
+  }
 
   // ── Available Loan Funds Panel (Banking Standard) ──
   var lf=calcAvailableLoanFunds();
@@ -2829,7 +2863,7 @@ function rLoanList(){
     '</div>'+
     '<div class="tab-bar">'+[["active","Active"],["pending","Pending"],["cleared","Cleared"],["declined","Declined"],["all","All"]].map(function(t){return'<button class="tab-btn'+(S.loanTab===t[0]?" active":"")+'" onclick="S.loanTab=\''+t[0]+'\';S.loanMetricFilter=\'all\';render()">'+t[1]+'</button>';}).join("")+'</div>'+
     '<div style="display:flex;justify-content:flex-end;margin:6px 0 10px 0"><button class="btn btn-g btn-sm" onclick="S.loanMetricFilter=\'all\';render()">Clear Loan Filter</button></div>'+
-    '<div class="mobile-stack"><table class="tbl"><thead><tr><th>No.</th><th>Borrower</th><th>Principal</th><th>Interest</th><th>Rate</th><th>Due Date</th><th>Outstanding</th><th>Status</th>'+(showActions?'<th>Actions</th>':'')+'</tr></thead>'+
+    '<div class="mobile-stack"><table class="tbl"><thead><tr><th>'+sortBtn("no","No.")+'</th><th>'+sortBtn("borrower","Borrower")+'</th><th>'+sortBtn("principal","Principal")+'</th><th>'+sortBtn("interest","Interest")+'</th><th>'+sortBtn("rate","Rate")+'</th><th>'+sortBtn("due","Due Date")+'</th><th>'+sortBtn("outstanding","Outstanding")+'</th><th>'+sortBtn("status","Status")+'</th>'+(showActions?'<th>Actions</th>':'')+'</tr></thead>'+
     '<tbody>'+(rows||'<tr><td colspan="'+(showActions?9:8)+'" class="no-data">No loans in this category</td></tr>')+'</tbody></table></div></div></div>';
 }
 
@@ -4234,6 +4268,9 @@ async function restoreLoansFromBackup(){
       S.loans=S.loans.concat(restoredLoans);
       S.repayments=S.repayments.concat(restoredRepayments);
     }
+    if(normalizeLoanGuarantorLocks()){
+      // Ensure borrower-first and equal-overflow locking is applied immediately after restore.
+    }
     await DB.set(K.loans,S.loans);
     await DB.set(K.repayments,S.repayments);
     logEvent("CONFIG",S.user?S.user.name:"System","Loans restored from backup: "+restoredLoans.length+" loans, "+restoredRepayments.length+" repayments");
@@ -4321,6 +4358,9 @@ async function restoreLoansFromAuditLog(){
 
     S.loans=recoveredLoans;
     S.repayments=recoveredRepayments;
+    if(normalizeLoanGuarantorLocks()){
+      // Ensure borrower-first and equal-overflow locking is applied immediately after restore.
+    }
     await DB.set(K.loans,S.loans);
     await DB.set(K.repayments,S.repayments);
     logEvent("CONFIG",S.user?S.user.name:"System","Loans recovered from audit log: "+recoveredLoans.length+" loans, "+recoveredRepayments.length+" repayments");
@@ -4340,6 +4380,16 @@ function goLoanListFilter(tab,metric){
   S.selId=null;
   S.loanTab=tab||"all";
   S.loanMetricFilter=metric||"all";
+  render();
+}
+function setLoanSort(key){
+  if(!key)return;
+  if(S.loanSortBy===key){
+    S.loanSortDir=S.loanSortDir==="asc"?"desc":"asc";
+  }else{
+    S.loanSortBy=key;
+    S.loanSortDir="asc";
+  }
   render();
 }
 function editMember(id){clearMemberFormUploadDraft();pushNav();S.editId=id;S.page="members";S.view="edit-member";render();}
@@ -5261,9 +5311,9 @@ function updateLoanCalc(){
       var guarantorReqAmt=c.total>borrowerAvail?Math.ceil((c.total-borrowerAvail)/2):0;
       var warnEl=document.getElementById("g2-qualify-warn");
       if(warnEl){
-        if(g1Id&&(document.getElementById("lf-g2")||{value:""}).value){
+        if(g1Cur&&(document.getElementById("lf-g2")||{value:""}).value){
           var g2Id=(document.getElementById("lf-g2")||{value:""}).value;
-          var g1Avail=memberAvailSavings(g1Id);
+          var g1Avail=memberAvailSavings(g1Cur);
           var g2Avail=memberAvailSavings(g2Id);
           if(g1Avail<guarantorReqAmt||g2Avail<guarantorReqAmt){
             warnEl.innerHTML="⚠️ "+(g1Avail<guarantorReqAmt?"G1 has only "+fmt(g1Avail)+" available (needs "+fmt(guarantorReqAmt)+" share)"+(g2Avail<guarantorReqAmt?" · ":""):"")+(g2Avail<guarantorReqAmt?"G2 has only "+fmt(g2Avail)+" available (needs "+fmt(guarantorReqAmt)+" share)":"");
