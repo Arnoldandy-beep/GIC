@@ -1169,7 +1169,7 @@ function debugMemberAttachments(memberId){
     secretary:["view","approve_loan","manage_members","manage_fees","view_reports","export","approve_expense","record_fines"],
     committee:["view","approve_loan"]
   };
-  return !!(map[u.access]&&map[u.access].indexOf(a)>=0);
+    savTab:"overview",savMemberId:"",loanTab:"active",loanMetricFilter:"all",intTab:"overview",expTab:"list",
 }
 function isAdminUser(u){return u&&u.access!=="member";}
 function userWantsAlerts(u){return !u||u.notifyEnabled!==false;}
@@ -2147,9 +2147,11 @@ function rDashboard(){
     '<button class="btn btn-p btn-sm" onclick="refreshDashboard()">🔄 Refresh Math</button>'+
     '<button class="btn btn-p btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button></div></div>'+
     '<div class="grid4" style="margin-bottom:14px">'+
-      [["Active Members",S.members.filter(function(m){return m.status==="Active";}).length,"🧑‍🤝‍🧑"],
-       ["Current Active Pool",fmt(currentActivePool),"💼"],["Active Loans",activeLoans.length,"🏦"],["Outstanding",fmt(totalOut),"⚠️"]].map(function(s){
-        return'<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">'+s[2]+'</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+s[0]+'</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+s[1]+'</div></div></div>';}).join("")+'</div>'+
+      [["Active Members",S.members.filter(function(m){return m.status==="Active";}).length,"🧑‍🤝‍🧑","S.memberStatusFilter=\'Active\';goPage(\'members\')"],
+       ["Current Active Pool",fmt(currentActivePool),"💼","goPage(\'savings\')"],
+       ["Active Loans",activeLoans.length,"🏦","goLoanListFilter(\'active\',\'all\')"],
+       ["Outstanding",fmt(totalOut),"⚠️","goLoanListFilter(\'active\',\'outstanding\')"]].map(function(s){
+        return'<div class="stat-card" style="cursor:pointer" onclick="'+s[3]+'"><div class="stat-icon" style="background:#C9A84C1A">'+s[2]+'</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+s[0]+'</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+s[1]+'</div></div></div>';}).join("")+'</div>'+
     '<div class="card" style="margin-bottom:14px;padding:12px 14px">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'+
         '<div><h3 style="font-size:13px;font-weight:700;color:var(--navy);margin:0 0 4px 0">Pool Views</h3><div style="font-size:11px;color:var(--text3)">Current Active Pool shows paid savings to this month for active members only. Total Active Pool includes all posted savings for non-exited members, including advance/future allocations.</div></div>'+
@@ -2682,19 +2684,37 @@ function enhanceSavingsLedger(){
 function rLoans(){if(S.view==="loan-detail")return rLoanDetail();return rLoanList();}
 function rLoanList(){
   var tab=S.loanTab||"active";
+  var metric=S.loanMetricFilter||"all";
   var tabMap={active:"Active",pending:"Pending",cleared:"Cleared",declined:"Declined"};
   var filtered=tab==="all"?S.loans:S.loans.filter(function(l){return l.status===tabMap[tab];});
+  filtered=filtered.filter(function(l){
+    var st=loanStat(l);
+    if(metric==="overdue")return l.status==="Active"&&isOverdue(l);
+    if(metric==="outstanding")return st.outstanding>0;
+    if(metric==="interest-pending")return st.outstandingInterest>0;
+    if(metric==="interest-cleared")return st.totalInterestDue>0&&st.outstandingInterest<=0;
+    if(metric==="principal-pending")return st.outstandingPrincipal>0;
+    if(metric==="principal-cleared")return st.outstandingPrincipal<=0;
+    return true;
+  });
   var showActions=filtered.some(function(loan){return canUserApproveLoan(loan,S.user)||hasUserApprovedLoan(loan,S.user&&S.user.id)||canManageLoanRecords(S.user)&&(loan.status==="Pending"||loan.isHistorical);});
+
+  var loanStats=S.loans.map(function(l){return{loan:l,st:loanStat(l)};});
+  var interestPending=loanStats.reduce(function(t,x){return t+x.st.outstandingInterest;},0);
+  var interestCleared=loanStats.reduce(function(t,x){return t+x.st.paidInterest;},0);
+  var principalPending=loanStats.reduce(function(t,x){return t+x.st.outstandingPrincipal;},0);
+  var principalCleared=loanStats.reduce(function(t,x){return t+x.st.paidPrincipal;},0);
+
   var rows=filtered.map(function(loan){
     var st=loanStat(loan),over=isOverdue(loan);
     return'<tr onclick="goLoanDetail(\''+loan.id+'\')" style="cursor:pointer">'+
       '<td data-label="No." class="mono gold-text" style="font-size:11px;font-weight:700">'+loan.no+'</td>'+
       '<td data-label="Borrower"><div style="font-weight:600">'+esc(loan.borrower)+'</div><span class="bdg bdg-'+(loan.isMember?"info":"gold")+'" style="font-size:10px">'+(loan.isMember?"Member":"Non-Member")+'</span></td>'+
       '<td data-label="Principal" style="font-weight:700">'+fmt(loan.principal)+'</td>'+
-      '<td data-label="Interest"><div style="font-weight:700;color:var(--gold2)">'+fmt(st.totalInterestDue)+'</div><div style="font-size:10px;color:var(--text3)">'+(st.penaltyInterest>0?'Penalty '+fmt(st.penaltyInterest):'Total '+fmt(st.total))+'</div></td>'+
+      '<td data-label="Interest"><div style="font-weight:700;color:var(--gold2)">'+fmt(st.totalInterestDue)+'</div><div style="font-size:10px;color:var(--text3)">Paid '+fmt(st.paidInterest)+' · Pending '+fmt(st.outstandingInterest)+'</div></td>'+
       '<td data-label="Rate">'+loan.rate+'%/mo</td>'+
       '<td data-label="Due">'+fmtD(loanDueDate(loan.issued,loan.months))+'</td>'+
-      '<td data-label="Outstanding"><div class="'+(st.outstanding>0?"red-text":"green-text")+'" style="font-weight:700">'+fmt(st.outstanding)+'</div><div style="font-size:10px;color:var(--text3)">'+st.pct+'% paid</div></td>'+
+      '<td data-label="Outstanding"><div class="'+(st.outstanding>0?"red-text":"green-text")+'" style="font-weight:700">'+fmt(st.outstanding)+'</div><div style="font-size:10px;color:var(--text3)">Int '+fmt(st.outstandingInterest)+' · Prin '+fmt(st.outstandingPrincipal)+'</div></td>'+
       '<td data-label="Status"><span class="bdg bdg-'+(loan.status==="Active"?over?"danger":"warning":loan.status==="Cleared"?"success":loan.status==="Pending"?"info":"gray")+'">'+(over&&loan.status==="Active"?"OVERDUE":loan.status)+'</span></td>'+
       (showActions?'<td data-label="Actions">'+(canUserApproveLoan(loan,S.user)?'<div class="fl"><button class="btn btn-grn btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();approveLoan(\''+loan.id+'\')">✅ Approve</button><button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button></div>':loan.status==="Pending"&&hasUserApprovedLoan(loan,S.user&&S.user.id)?'<span class="bdg bdg-success">Approved</span>':loan.status==="Pending"?'<button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button>':"—")+'</td>':"")+
       '</tr>';
@@ -2739,7 +2759,14 @@ function rLoanList(){
     '<div><h1 class="fd page-title">Loans</h1><div class="page-sub">'+MEM_RATE+'%/mo (members) · '+NM_RATE+'%/mo (non-members) · Max '+MAX_MO+' months</div></div>'+
     (canManageLoanRecords(S.user)?'<button class="btn btn-p btn-sm" onclick="S.modal={id:\'new-loan\',size:\'modal-xl\'};render()">+ New Loan</button>':"")+
     '</div>'+loanFundsHtml+'<div class="card">'+
+    '<div class="grid4" style="margin-bottom:10px">'+
+      '<div class="stat-card" style="cursor:pointer;'+(metric==="interest-pending"?'outline:2px solid var(--gold);':'')+'" onclick="S.loanMetricFilter=\'interest-pending\';render()"><div class="stat-icon" style="background:#C9A84C1A">🏦</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Pending</div><div style="font-size:14px;font-weight:700;color:var(--gold2)">'+fmt(interestPending)+'</div></div></div>'+
+      '<div class="stat-card" style="cursor:pointer;'+(metric==="interest-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'interest-cleared\';render()"><div class="stat-icon" style="background:#057A551A">✅</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(interestCleared)+'</div></div></div>'+
+      '<div class="stat-card" style="cursor:pointer;'+(metric==="principal-pending"?'outline:2px solid var(--red);':'')+'" onclick="S.loanMetricFilter=\'principal-pending\';render()"><div class="stat-icon" style="background:#C0392B1A">📉</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Pending</div><div style="font-size:14px;font-weight:700;color:var(--red)">'+fmt(principalPending)+'</div></div></div>'+
+      '<div class="stat-card" style="cursor:pointer;'+(metric==="principal-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'principal-cleared\';render()"><div class="stat-icon" style="background:#057A551A">💵</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(principalCleared)+'</div></div></div>'+
+    '</div>'+
     '<div class="tab-bar">'+[["active","Active"],["pending","Pending"],["cleared","Cleared"],["declined","Declined"],["all","All"]].map(function(t){return'<button class="tab-btn'+(S.loanTab===t[0]?" active":"")+'" onclick="S.loanTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join("")+'</div>'+
+    '<div style="display:flex;justify-content:flex-end;margin:6px 0 10px 0"><button class="btn btn-g btn-sm" onclick="S.loanMetricFilter=\'all\';render()">Clear Loan Filter</button></div>'+
     '<div class="mobile-stack"><table class="tbl"><thead><tr><th>No.</th><th>Borrower</th><th>Principal</th><th>Interest</th><th>Rate</th><th>Due Date</th><th>Outstanding</th><th>Status</th>'+(showActions?'<th>Actions</th>':'')+'</tr></thead>'+
     '<tbody>'+(rows||'<tr><td colspan="'+(showActions?9:8)+'" class="no-data">No loans in this category</td></tr>')+'</tbody></table></div></div></div>';
 }
@@ -3894,6 +3921,7 @@ function mAddRepayment(){
   return mhdr("Record Repayment")+
     '<div class="mbody"><div class="fg">'+
       '<div class="full"><label class="form-label">Loan</label><input class="inp" value="'+loan.no+' — '+esc(loan.borrower)+'" disabled></div>'+
+      '<div class="full"><label class="form-label">Payment Type</label><select class="inp" id="rf-mode"><option value="installment" selected>Installment (Interest first, then Principal)</option><option value="interest-only">Interest Only</option></select></div>'+
       '<div><label class="form-label">Outstanding</label><input class="inp" value="'+fmt(st.outstanding)+'" disabled style="color:var(--red);font-weight:700"></div>'+
       '<div><label class="form-label">Standard Instalment</label><input class="inp" value="'+fmt(c.monthly)+'" disabled></div>'+
       '<div><label class="form-label">Interest Outstanding</label><input class="inp" value="'+fmt(st.outstandingInterest)+'" disabled></div>'+
@@ -3901,7 +3929,7 @@ function mAddRepayment(){
       '<div><label class="form-label">* Amount (UGX)</label><input class="inp" type="number" id="rf-amount" value="'+Math.min(c.monthly,st.outstanding)+'"></div>'+
       '<div><label class="form-label">* Payment Date</label><input class="inp" type="date" id="rf-date" value="'+todayStr()+'"></div>'+
       '<div class="full"><label class="form-label">Notes</label><input class="inp" id="rf-notes" placeholder="e.g., Mobile Money, Cash..."></div>'+
-    '</div><div class="alert '+(st.penaltyInterest>0?'alert-warn':'alert-info')+'" style="font-size:12px;margin-top:12px">Posting standard: repayment is applied to outstanding interest first, then to principal. Loan closes automatically once the outstanding balance reaches zero.'+(st.penaltyInterest>0?' This loan is overdue by '+st.penaltyMonths+' month(s), so extra interest of '+fmt(st.penaltyInterest)+' has already been added.':'')+'</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveRepayment()">💾 Record</button>');
+    '</div><div class="alert '+(st.penaltyInterest>0?'alert-warn':'alert-info')+'" style="font-size:12px;margin-top:12px">Posting standard: every installment settles outstanding interest first, then principal. Use Interest Only when member is paying interest alone. Loan closes automatically once the outstanding balance reaches zero.'+(st.penaltyInterest>0?' This loan is overdue by '+st.penaltyMonths+' month(s), so extra interest of '+fmt(st.penaltyInterest)+' has already been added.':'')+'</div></div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveRepayment()">💾 Record</button>');
 }
 
 function mCalcInterest(){
@@ -3993,6 +4021,15 @@ function mDeclineLoan(){
 function goPage(p){pushNav();S.page=p;S.view="list";S.selId=null;render();}
 function goMemberDetail(id){pushNav();S.page="members";S.view="member-detail";S.selId=id;render();}
 function goLoanDetail(id){pushNav();S.page="loans";S.view="loan-detail";S.selId=id;render();}
+function goLoanListFilter(tab,metric){
+  pushNav();
+  S.page="loans";
+  S.view="list";
+  S.selId=null;
+  S.loanTab=tab||"all";
+  S.loanMetricFilter=metric||"all";
+  render();
+}
 function editMember(id){clearMemberFormUploadDraft();pushNav();S.editId=id;S.page="members";S.view="edit-member";render();}
 function cancelForm(){goBack();}
 function closeModal(){
@@ -5151,21 +5188,27 @@ async function saveRepayment(){
   var loan=S.loans.filter(function(l){return l.id===S.selId;})[0];if(!loan)return;
   if(loan.status!=="Active"){showToast("Only active loans can receive repayments","err");return;}
   var amount=Number(v("rf-amount")||0);var date=v("rf-date")||todayStr();
+  var mode=v("rf-mode")||"installment";
   if(!amount||amount<=0){showToast("Enter payment amount","err");return;}
   var before=loanStat(loan,date);
   if(before.outstanding<=0){showToast("This loan is already fully paid and closed","warn");return;}
   if(amount>before.outstanding){showToast("Payment exceeds outstanding balance of "+fmt(before.outstanding),"err");return;}
+  if(mode==="interest-only"&&amount>before.outstandingInterest){
+    showToast("Interest-only payment cannot exceed outstanding interest of "+fmt(before.outstandingInterest),"err");
+    return;
+  }
   var n2=S.repayments.filter(function(r){return r.loanId===loan.id;}).length+1;
   var interestComponent=Math.min(before.outstandingInterest,amount);
-  var principalComponent=Math.min(before.outstandingPrincipal,Math.max(0,amount-interestComponent));
+  var principalComponent=mode==="interest-only"?0:Math.min(before.outstandingPrincipal,Math.max(0,amount-interestComponent));
+  var postedAmount=interestComponent+principalComponent;
   var balanceAfter=Math.max(0,before.outstanding-amount);
   var installmentsCovered=Math.floor((before.applied+amount)/Math.max(1,Math.round(before.total/Math.max(1,loan.months))));
-  S.repayments=S.repayments.concat([{id:gid(),loanId:loan.id,amount:amount,date:date,notes:v("rf-notes")||"",ref:"RPY-"+loan.no+"-"+String(n2).padStart(3,"0"),by:S.user.username,interestComponent:interestComponent,principalComponent:principalComponent,balanceAfter:balanceAfter,installmentsPaidAfter:Math.min(loan.months,installmentsCovered)}]);
+  S.repayments=S.repayments.concat([{id:gid(),loanId:loan.id,amount:postedAmount,date:date,notes:v("rf-notes")||"",ref:"RPY-"+loan.no+"-"+String(n2).padStart(3,"0"),by:S.user.username,paymentMode:mode,interestComponent:interestComponent,principalComponent:principalComponent,balanceAfter:balanceAfter,installmentsPaidAfter:Math.min(loan.months,installmentsCovered)}]);
   if(balanceAfter<=0){
     S.loans=S.loans.map(function(l){return l.id===loan.id?Object.assign({},l,{status:"Cleared",clearedAt:date,lockedBorrower:0,lockedG1:0,lockedG2:0}):l;});
-    logEvent("REPAYMENT",S.user.name,"Loan "+loan.no+" fully cleared. Principal recovered: "+fmt(principalComponent)+", interest received: "+fmt(interestComponent)+(before.penaltyInterest>0?", overdue penalty interest included: "+fmt(before.penaltyInterest):""));showToast("Loan fully cleared and closed","ok");
+    logEvent("REPAYMENT",S.user.name,"Loan "+loan.no+" fully cleared via "+mode+" payment. Principal recovered: "+fmt(principalComponent)+", interest received: "+fmt(interestComponent)+(before.penaltyInterest>0?", overdue penalty interest included: "+fmt(before.penaltyInterest):""));showToast("Loan fully cleared and closed","ok");
   } else {
-    logEvent("REPAYMENT",S.user.name,"Repayment "+fmt(amount)+" posted on "+loan.no+" (interest "+fmt(interestComponent)+", principal "+fmt(principalComponent)+", balance "+fmt(balanceAfter)+(before.penaltyInterest>0?", overdue penalty active":"")+")");showToast("Repayment recorded. New balance: "+fmt(balanceAfter),"ok");
+    logEvent("REPAYMENT",S.user.name,"Repayment "+fmt(postedAmount)+" posted on "+loan.no+" as "+mode+" (interest "+fmt(interestComponent)+", principal "+fmt(principalComponent)+", balance "+fmt(balanceAfter)+(before.penaltyInterest>0?", overdue penalty active":"")+")");showToast("Repayment recorded. New balance: "+fmt(balanceAfter),"ok");
   }
   await DB.set(K.repayments,S.repayments);await DB.set(K.loans,S.loans);closeModal();render();
 }
