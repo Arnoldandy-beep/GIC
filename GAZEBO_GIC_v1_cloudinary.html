@@ -1642,12 +1642,46 @@ function calcAvailableLoanFunds(){
 }
 
 function loanEligibility(mid){
+  var member=S.members.filter(function(x){return x.id===mid;})[0]||{};
+  function norm(v){return String(v||"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
+  var myNo=norm(member.no);
+  var myName=norm(member.fullName);
+  function isBorrowerMatch(l){
+    if(l.memberId===mid)return true;
+    if(l.memberNo&&norm(l.memberNo)===myNo)return true;
+    if(!l.memberId){
+      var b=norm(l.borrower);
+      if(b&&b===myName)return true;
+      if(b&&myNo&&b.indexOf(myNo)>=0)return true;
+    }
+    return false;
+  }
+  function isGuarantorMatch(l){
+    if(l.g1Id===mid||l.g2Id===mid)return true;
+    if(!l.g1Id&&norm(l.g1Name)===myName)return true;
+    if(!l.g2Id&&norm(l.g2Name)===myName)return true;
+    return false;
+  }
   var avail=memberAvailSavings(mid);
-  var activeL=S.loans.filter(function(l){return l.memberId===mid&&l.status==="Active";});
-  var hasActive=activeL.length>0;
+  var activeBorrowed=S.loans.filter(function(l){return l.status==="Active"&&isBorrowerMatch(l);});
+  var activeGuaranteed=S.loans.filter(function(l){return l.status==="Active"&&isGuarantorMatch(l)&&!isBorrowerMatch(l);});
+  var lockedAsGuarantor=activeGuaranteed.reduce(function(t,l){
+    var isG1=l.g1Id===mid||(!l.g1Id&&norm(l.g1Name)===myName);
+    return t+(isG1?(l.lockedG1||0):(l.lockedG2||0));
+  },0);
+  var hasActive=activeBorrowed.length>0||activeGuaranteed.length>0;
   var maxLoan=avail*2; // can borrow up to 2x available savings (if guarantors cover rest)
   var eligible=avail>0&&!hasActive;
-  return{avail:avail,hasActive:hasActive,maxLoan:maxLoan,eligible:eligible,activeLoans:activeL};
+  return{
+    avail:avail,
+    hasActive:hasActive,
+    maxLoan:maxLoan,
+    eligible:eligible,
+    activeLoans:activeBorrowed,
+    activeBorrowed:activeBorrowed,
+    activeGuaranteed:activeGuaranteed,
+    lockedAsGuarantor:lockedAsGuarantor
+  };
 }
 
 // Expenses calculations
@@ -3351,6 +3385,9 @@ function rMyLoans(){
 function rMyEligibility(){
   var m=getMyMember();if(!m)return'<div class="card no-data">No member profile linked.</div>';
   var el=loanEligibility(m.id);
+  var activeBorrowed=el.activeBorrowed||[];
+  var activeGuaranteed=el.activeGuaranteed||[];
+  var guarantorLocked=el.lockedAsGuarantor||0;
   var eligible=el.eligible;
   var maxMonths=maxLoanMonths(todayStr());
   var maxPossible=el.avail; // borrower's own savings as their portion
@@ -3359,11 +3396,30 @@ function rMyEligibility(){
     '<div class="card" style="margin-bottom:12px;border-left:4px solid '+(eligible?"var(--green)":el.hasActive?"var(--red)":"var(--gold)")+'">'+
       '<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">'+
         '<div style="width:56px;height:56px;border-radius:50%;background:'+(eligible?"#DEF7EC":el.hasActive?"#FDE8E8":"#FEF3C7")+';display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0">'+(eligible?"✅":el.hasActive?"🔴":"⚠️")+'</div>'+
-        '<div><div style="font-size:16px;font-weight:700;color:var(--navy)">'+(eligible?"Eligible for a Loan":el.hasActive?"Active Loan In Progress":"Insufficient Savings")+'</div>'+
-        '<div style="font-size:13px;color:var(--text3);margin-top:2px">'+(eligible?"You qualify for a member loan — contact the Treasurer":el.hasActive?"Clear your current loan before applying for a new one":"Build your savings to become eligible")+'</div></div>'+
+        '<div><div style="font-size:16px;font-weight:700;color:var(--navy)">'+(eligible?"Eligible for a Loan":el.hasActive?"Active Loan Commitment":"Insufficient Savings")+'</div>'+
+        '<div style="font-size:13px;color:var(--text3);margin-top:2px">'+(eligible?"You can apply now.":el.hasActive?"Please clear active commitments first.":"Build your savings to unlock eligibility.")+'</div></div>'+
       '</div>'+
       [["Your Available Savings",fmt(el.avail)],["Loan Interest Rate",MEM_RATE+"% per month (flat)"],["Max Loan Period",maxMonths+" months"],["Total Repayment Period","Up to Dec 30, "+now().getFullYear()]].map(function(p){return'<div class="kv-row"><span class="kv-label">'+p[0]+'</span><span class="kv-value">'+p[1]+'</span></div>';}).join("")+
+      (el.hasActive?'<div class="alert alert-info" style="margin-top:10px;font-size:12px">'+
+        '<strong>'+activeBorrowed.length+'</strong> active borrowed loan(s) · '+
+        '<strong>'+activeGuaranteed.length+'</strong> active guaranteed loan(s)'+
+        (activeGuaranteed.length?' · Locked as guarantor: <strong class="red-text">'+fmt(guarantorLocked)+'</strong>':'')+
+      '</div>':'')+
     '</div>'+
+    (activeBorrowed.length?'<div class="card" style="margin-bottom:12px">'+
+      '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Your Active Loan(s)</div>'+
+      activeBorrowed.map(function(l){var st=loanStat(l);return'<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray2)"><span style="font-size:12px;color:var(--navy);font-weight:700">'+esc(l.no)+'</span><span style="font-size:12px;color:var(--text2)">Pending '+fmt(st.outstanding)+'</span></div>';}).join("")+
+      '<div style="margin-top:8px;font-size:12px;color:var(--text2)">Clear pending balance to unlock next loan request.</div>'+
+    '</div>':'')+
+    (activeGuaranteed.length?'<div class="card" style="margin-bottom:12px">'+
+      '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Loans You Guarantee</div>'+
+      activeGuaranteed.map(function(l){
+        var isG1=l.g1Id===m.id||(!l.g1Id&&String(l.g1Name||"").toUpperCase()===String(m.fullName||"").toUpperCase());
+        var locked=isG1?(l.lockedG1||0):(l.lockedG2||0);
+        return'<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray2)"><span style="font-size:12px;color:var(--navy);font-weight:700">'+esc(l.no)+' · '+esc(l.borrower)+'</span><span style="font-size:12px;color:var(--red)">Locked '+fmt(locked)+'</span></div>';
+      }).join("")+
+      '<div style="margin-top:8px;font-size:12px;color:var(--text2)">Locked savings release automatically after those loans are cleared.</div>'+
+    '</div>':'')+
     (eligible?'<div class="card" style="margin-bottom:12px">'+
       '<div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Sample Loan Scenarios (your savings + 2 guarantors required)</div>'+
       [1,2,3,4,5,6].filter(function(mo){return mo<=maxMonths;}).map(function(mo){
