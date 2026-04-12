@@ -1594,10 +1594,10 @@ function calcLoanPortfolioTotals(asOfDate){
   var outstandingPrincipal=activeStats.reduce(function(t,x){return t+x.stat.outstandingPrincipal;},0);
   var outstandingTotal=activeStats.reduce(function(t,x){return t+x.stat.outstanding;},0);
   var interestReceivable=activeStats.reduce(function(t,x){return t+x.stat.outstandingInterest;},0);
-  var interestActive=activeStats.reduce(function(t,x){return t+x.stat.configuredInterest;},0);
+  var interestActive=activeStats.reduce(function(t,x){return t+x.stat.outstandingInterest;},0);
   var interestClosed=closedStats.reduce(function(t,x){return t+x.stat.configuredInterest;},0);
   var overdueStats=activeStats.filter(function(x){return isOverdue(x.loan);});
-  var overdueInterest=overdueStats.reduce(function(t,x){return t+x.stat.totalInterestDue;},0);
+  var overdueInterest=overdueStats.reduce(function(t,x){return t+x.stat.outstandingInterest;},0);
   var cashAvailable=savingsPool-outstandingPrincipal;
   return{
     savingsPool:savingsPool,
@@ -2705,7 +2705,7 @@ function rLoanList(){
     if(metric==="overdue")return l.status==="Active"&&isOverdue(l);
     if(metric==="outstanding")return st.outstanding>0;
     if(metric==="interest-pending")return st.outstandingInterest>0;
-    if(metric==="interest-cleared")return st.totalInterestDue>0&&st.outstandingInterest<=0;
+    if(metric==="interest-cleared")return l.status==="Cleared"&&st.totalInterestDue>0&&st.outstandingInterest<=0;
     if(metric==="principal-pending")return st.outstandingPrincipal>0;
     if(metric==="principal-cleared")return st.outstandingPrincipal<=0;
     return true;
@@ -2749,8 +2749,8 @@ function rLoanList(){
         '<div style="font-size:10px;color:var(--text3)">Available to deploy</div></div></div>'+
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:10px">'+
       [['📤 Deployed Active Loans',fmt(portfolio.outstandingPrincipal),'var(--red)','goLoanListFilter(\'active\',\'outstanding\')'],
-       ['🏦 Total Interest on Active Loans',fmt(portfolio.interestActive),'var(--gold2)','goLoanListFilter(\'active\',\'interest-pending\')'],
-       ['🚨 Interest on Overdue Loans',fmt(portfolio.overdueInterest),'var(--red)','goLoanListFilter(\'active\',\'overdue\')'],
+       ['🏦 Outstanding Interest on Active Loans',fmt(portfolio.interestActive),'var(--gold2)','goLoanListFilter(\'active\',\'interest-pending\')'],
+       ['🚨 Outstanding Interest on Overdue Loans',fmt(portfolio.overdueInterest),'var(--red)','goLoanListFilter(\'active\',\'overdue\')'],
        ['💼 Principal on All Loans',fmt(totalPrincipalAllLoans),'var(--navy)','goLoanListFilter(\'all\',\'all\')'],
        ['✅ Closed Loans',portfolio.closedLoanCount+' loan(s)','var(--green)','goLoanListFilter(\'cleared\',\'all\')'],
        ['🏁 Interest on Closed Loans',fmt(portfolio.interestClosed),'var(--green)','goLoanListFilter(\'cleared\',\'interest-cleared\')']].map(function(x){
@@ -2780,7 +2780,7 @@ function rLoanList(){
     (filtersHidingData?'<div class="alert alert-warn" style="margin-bottom:10px">No rows matched current filters. Click <strong>Reset To Full History</strong> to restore all loan history view.</div>':'')+
     '<div class="grid4" style="margin-bottom:10px">'+
       '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="interest-pending"?'outline:2px solid var(--gold);':'')+'" onclick="S.loanMetricFilter=\'interest-pending\';render()"><div class="stat-icon" style="background:#C9A84C1A">🏦</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Pending</div><div style="font-size:14px;font-weight:700;color:var(--gold2)">'+fmt(interestPending)+'</div></div></button>'+
-      '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="interest-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'interest-cleared\';render()"><div class="stat-icon" style="background:#057A551A">✅</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(interestCleared)+'</div></div></button>'+
+      '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="interest-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'interest-cleared\';render()"><div class="stat-icon" style="background:#057A551A">✅</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Cleared (Closed)</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(interestCleared)+'</div></div></button>'+
       '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="principal-pending"?'outline:2px solid var(--red);':'')+'" onclick="S.loanMetricFilter=\'principal-pending\';render()"><div class="stat-icon" style="background:#C0392B1A">📉</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Pending</div><div style="font-size:14px;font-weight:700;color:var(--red)">'+fmt(principalPending)+'</div></div></button>'+
       '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="principal-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'principal-cleared\';render()"><div class="stat-icon" style="background:#057A551A">💵</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(principalCleared)+'</div></div></button>'+
     '</div>'+
