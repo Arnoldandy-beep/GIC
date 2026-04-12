@@ -816,7 +816,7 @@ var S={
   lockouts:{},loading:true,toast:null,realtimeListenersActive:false,
   memberSearch:"",memberStatusFilter:"Active",
   finesFilter:"all",
-  savTab:"overview",savMemberId:"",loanTab:"active",intTab:"overview",expTab:"list",
+  savTab:"overview",savMemberId:"",loanTab:"active",loanMetricFilter:"all",intTab:"overview",expTab:"list",
   usersTab:"admin"
 };
 var _memberFormUploadDraft={passportPhoto:"",nidCopy:"",nidCopyName:"",nidCopyType:""};
@@ -1099,8 +1099,6 @@ function getLoanCommitteeUsers(){
     });
 }
 
-function CAN(u,a){
-  if(!u)return false;
 function getMemberAttachmentDiagnostics(){
   var members=S.members||[];
   var affectedMembers=0,inlinePhotos=0,inlineDocs=0,externalPhotos=0,externalDocs=0;
@@ -1161,6 +1159,8 @@ function debugMemberAttachments(memberId){
   console.log("Full member object:",m);
   console.groupEnd();
 }
+function CAN(u,a){
+  if(!u)return false;
   if(u.access==="full")return true;
   if(u.access==="member")return false; // members use portal
   var map={
@@ -1169,7 +1169,7 @@ function debugMemberAttachments(memberId){
     secretary:["view","approve_loan","manage_members","manage_fees","view_reports","export","approve_expense","record_fines"],
     committee:["view","approve_loan"]
   };
-    savTab:"overview",savMemberId:"",loanTab:"active",loanMetricFilter:"all",intTab:"overview",expTab:"list",
+  return (map[u.access]||[]).indexOf(a)>=0;
 }
 function isAdminUser(u){return u&&u.access!=="member";}
 function userWantsAlerts(u){return !u||u.notifyEnabled!==false;}
