@@ -596,7 +596,7 @@ var CLUB="GAZEBO Investment Club", CLUB_ACC="Centenary Bank A/C No. 3205204430";
 var MC=100000, REG_FEE=50000, EXIT_RATE=0.05, MEM_RATE=5, NM_RATE=10, MAX_MO=6, SAV_INT=2;
 var FINE_AMOUNT=20000;
 var FINE_VIOLATIONS=["Absent without prior apology","Late arrival to meeting","Disruptive conduct at meeting","Failure to comply with club resolution","Other (specify)"];
-var LOAN_TERM_DAYS=30;
+var LOAN_TERM_DAYS=31;
 var MS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 var MGRID=[
   {yr:2025,mo:7,l:"Aug-25"},{yr:2025,mo:8,l:"Sep-25"},{yr:2025,mo:9,l:"Oct-25"},
@@ -1503,18 +1503,32 @@ function loanStat(loan,asOfDate){
     pct:totalDue>0?Math.min(100,Math.round((applied/totalDue)*100)):0
   };
 }
-function loanDueDate(issued,months){
-  var d=new Date(issued+"T12:00:00");
-    var due=new Date(d.getTime()+(LOAN_TERM_DAYS*24*60*60*1000));
+function loanDueBaseDate(loan){
+  if(!loan)return "";
+  return loan.approvedAt||loan.disbursedAt||loan.issued||"";
+}
+function loanDueDate(loanOrDate,months){
+  var base=(loanOrDate&&typeof loanOrDate==="object")?loanDueBaseDate(loanOrDate):loanOrDate;
+  if(!base)return "";
+  var d=new Date(base+"T12:00:00");
+  if(isNaN(d.getTime()))return "";
+  var termMonths=Math.max(1,Number(months)||((loanOrDate&&typeof loanOrDate==="object")?Number(loanOrDate.months)||1:1));
+  var dueDays=LOAN_TERM_DAYS*termMonths;
+  var due=new Date(d.getTime()+(dueDays*24*60*60*1000));
   return due.toISOString().split("T")[0];
 }
 function getLoanPenaltyMonths(loan,asOfDate){
   if(!loan||loan.status!=="Active")return 0;
   var ref=asOfDate?new Date(asOfDate+"T12:00:00"):now();
-  var due=new Date(loanDueDate(loan.issued,loan.months)+"T12:00:00");
-  if(ref<=due)return 0;
-  var penaltyStart=new Date(due.getFullYear(),due.getMonth()+1,1,12,0,0);
-  return ((ref.getFullYear()-penaltyStart.getFullYear())*12)+(ref.getMonth()-penaltyStart.getMonth())+1;
+  var dueStr=loanDueDate(loan,loan.months);
+  if(!dueStr)return 0;
+  var due=new Date(dueStr+"T12:00:00");
+  var lateMs=ref.getTime()-due.getTime();
+  if(lateMs<=0)return 0;
+  var lateDays=Math.floor(lateMs/(24*60*60*1000));
+  if(lateDays<=0)return 0;
+  // Charge penalty from the first day after default, then every 30 late days.
+  return Math.max(1,Math.ceil(lateDays/30));
 }
 function calcLoanPenaltyInterest(loan,penaltyMonths){
   if(!loan||!penaltyMonths||penaltyMonths<=0)return 0;
@@ -2813,7 +2827,7 @@ function rLoanList(){
     if(key==="principal")return Number(loan.principal||0);
     if(key==="interest")return Number(st.totalInterestDue||0);
     if(key==="rate")return Number(loan.rate||0);
-    if(key==="due")return String(loanDueDate(loan.issued,loan.months)||"");
+    if(key==="due")return String(loanDueDate(loan,loan.months)||"");
     if(key==="outstanding")return Number(st.outstanding||0);
     if(key==="status")return Number(statusRank[loan.status]||99);
     return String(loan.no||"");
@@ -2840,7 +2854,7 @@ function rLoanList(){
       '<td data-label="Principal" style="font-weight:700">'+fmt(loan.principal)+'</td>'+
       '<td data-label="Interest"><div style="font-weight:700;color:'+(interestDone?'var(--green)':'var(--gold2)')+';text-decoration:'+(interestDone?'line-through':'none')+';text-decoration-color:var(--green);text-decoration-thickness:1px">'+fmt(st.totalInterestDue)+'</div><div style="font-size:10px;color:var(--text3)">Paid '+fmt(st.paidInterest)+' · Pending '+fmt(st.outstandingInterest)+(interestDone?' · <span style="color:var(--green);font-weight:700">Interest Cleared</span>':'')+'</div></td>'+
       '<td data-label="Rate">'+loan.rate+'%/mo</td>'+
-      '<td data-label="Due">'+fmtD(loanDueDate(loan.issued,loan.months))+'</td>'+
+      '<td data-label="Due">'+fmtD(loanDueDate(loan,loan.months))+'</td>'+
       '<td data-label="Outstanding"><div class="'+(st.outstanding>0?"red-text":"green-text")+'" style="font-weight:700">'+fmt(st.outstanding)+'</div><div style="font-size:10px;color:var(--text3)">Int '+fmt(st.outstandingInterest)+' · Prin '+fmt(st.outstandingPrincipal)+'</div></td>'+
       '<td data-label="Status"><span class="bdg bdg-'+(loan.status==="Active"?over?"danger":"warning":loan.status==="Cleared"?"success":loan.status==="Pending"?"info":"gray")+'">'+(over&&loan.status==="Active"?"OVERDUE":loan.status)+'</span></td>'+
       (showActions?'<td data-label="Actions">'+(canUserApproveLoan(loan,S.user)?'<div class="fl"><button class="btn btn-grn btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();approveLoan(\''+loan.id+'\')">✅ Approve</button><button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button></div>':loan.status==="Pending"&&hasUserApprovedLoan(loan,S.user&&S.user.id)?'<span class="bdg bdg-success">Approved</span>':loan.status==="Pending"?'<button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button>':"—")+'</td>':"")+
@@ -2915,12 +2929,27 @@ function rLoanDetail(){
   if(!loan){S.view="list";return rLoanList();}
   var loanDocUrl=normalizeCloudinaryAssetUrl(loan.loanDoc,loan.loanDocType||loan.loanDocName||"");
   var c=calcLoan(loan.principal,loan.rate,loan.months),st=loanStat(loan),over=isOverdue(loan);
+  var dueDateStr=loanDueDate(loan,loan.months);
+  var dueBasis=loan.approvedAt?"Approved Date":(loan.disbursedAt?"Disbursed Date":"Taken Date");
+  var dueDateObj=dueDateStr?new Date(dueDateStr+"T12:00:00"):null;
+  var lateDays=0;
+  if(dueDateObj&&!isNaN(dueDateObj.getTime())){
+    lateDays=Math.max(0,Math.floor((now().getTime()-dueDateObj.getTime())/(24*60*60*1000)));
+  }
+  var penaltyTier=st.penaltyMonths>0?String(st.penaltyMonths):"0";
+  var showLoanDiagnostics=isAdminUser(S.user)||S.user.access==="treasurer";
+  var diagnosticsCard=showLoanDiagnostics?'<div class="card" style="margin-bottom:12px;border-left:4px solid '+(over?'var(--red)':'var(--blue)')+'"><div class="sec-hdr" style="margin-top:0">Loan Diagnostics</div><div class="grid2">'+
+      '<div class="kv-row"><span class="kv-label">Due Date Basis</span><span class="kv-value">'+dueBasis+'</span></div>'+
+      '<div class="kv-row"><span class="kv-label">Effective Due Date</span><span class="kv-value">'+fmtD(dueDateStr)+'</span></div>'+
+      '<div class="kv-row"><span class="kv-label">Late Days</span><span class="kv-value" style="color:'+(lateDays>0?'var(--red)':'var(--green)')+';font-weight:800">'+lateDays+'</span></div>'+
+      '<div class="kv-row"><span class="kv-label">Penalty Tier</span><span class="kv-value">'+penaltyTier+' month(s)</span></div>'+
+    '</div><div style="font-size:11px;color:var(--text3);margin-top:6px">Penalty starts from day 1 after due date and increases every 30 late days.</div></div>':'';
   var lReps=S.repayments.filter(function(r){return r.loanId===loan.id;}).sort(function(a,b){return a.date.localeCompare(b.date);});
   var g1M=loan.g1Id?S.members.filter(function(m){return m.id===loan.g1Id;})[0]:null;
   var g2M=loan.g2Id?S.members.filter(function(m){return m.id===loan.g2Id;})[0]:null;
   var sched=[];
   for(var si=0;si<loan.months;si++){
-    var dueStr=loanDueDate(loan.issued,si+1);
+    var dueStr=loanDueDate(loan,si+1);
     var sd=new Date(dueStr+"T12:00:00");
     var isPast=sd<now();
     var cumulativeDue=c.monthly*(si+1);
@@ -2937,7 +2966,7 @@ function rLoanDetail(){
       '<div style="font-size:18px;font-weight:800;color:'+(lf.available>0?"var(--green)":"var(--red)")+'">'+fmt(lf.available)+'</div></div>'+
     '<div style="font-size:11px;color:var(--text3);margin-top:4px">Active pool: '+fmt(lf.savingsPool)+' · Deployed: '+fmt(lf.deployedPrincipal)+' · Recovered: '+fmt(lf.recoveredPrincipal)+' · Utilisation: '+lf.utilizationPct+'%</div>'+
   '</div>';
-  return'<div class="fadein">'+availFundsSnippet+'<div class="fl" style="gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
+  return'<div class="fadein">'+availFundsSnippet+diagnosticsCard+'<div class="fl" style="gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
     '<button class="btn btn-g btn-sm" onclick="goBack()">← Back</button>'+
     '<div style="flex:1"><h1 class="fd page-title" style="font-size:18px">'+esc(loan.borrower)+'</h1>'+
     '<div style="color:var(--gold);font-size:11px;font-weight:700">'+loan.no+' · <span class="bdg bdg-'+(loan.isMember?"info":"gold")+'">'+(loan.isMember?"Member":"Non-Member")+'</span> <span class="bdg bdg-'+(loan.status==="Active"?over?"danger":"warning":loan.status==="Cleared"?"success":"gray")+'">'+(over&&loan.status==="Active"?"OVERDUE":loan.status)+'</span></div></div>'+
@@ -2950,7 +2979,7 @@ function rLoanDetail(){
         kv([["Loan No.",loan.no],["Borrower",loan.borrower],["Purpose",loan.purpose],
           ["Rate",loan.rate+"% per month (flat)"],["Principal",fmt(loan.principal)],
           ["Interest (configured)",fmt(st.configuredInterest)],["Overdue Penalty Interest",fmt(st.penaltyInterest)],["Interest ("+loan.rate+"%×"+loan.months+"mo.)",fmt(c.interest)],["Total Repayable",fmt(st.total)],
-          ["Monthly Instalment",fmt(c.monthly)],["Issued",fmtD(loan.issued)],["Due Date",fmtD(loanDueDate(loan.issued,loan.months))],
+          ["Monthly Instalment",fmt(c.monthly)],["Issued",fmtD(loan.issued)],["Due Date",fmtD(loanDueDate(loan,loan.months))],
           ["Penalty Months",st.penaltyMonths],["Principal Repaid",fmt(st.paidPrincipal)],["Interest Repaid",fmt(st.paidInterest)],["Principal Balance",fmt(st.outstandingPrincipal)],["Interest Balance",fmt(st.outstandingInterest)],["Instalments Covered",st.installmentsPaid+" / "+loan.months],
           ["Submitted By",loan.submittedBy||"—"],["Approval Progress",getLoanApprovalLabel(loan)],["Approved By",'<span style="color:var(--green);font-weight:700">'+(loan.approvedBy||getLoanApprovals(loan).map(function(a){return a.name;}).join(", ")||"Pending")+'</span>'],
           ["Approved Date",fmtD(loan.approvedAt)],
@@ -3431,7 +3460,7 @@ function rMyLoans(){
       var progressPct=loan.status==="Pending"?Math.round((getLoanApprovalCount(loan)/(loan.requiredApprovals||loanApprovalThreshold()))*100):st.pct;
       return'<div class="card" style="margin-bottom:12px;border-left:4px solid '+(over?"var(--red)":st.pct>=100?"var(--green)":"var(--gold)")+'">'+
         '<div class="fl" style="justify-content:space-between;margin-bottom:10px">'+
-          '<div><div style="font-weight:700;font-size:14px">'+esc(loan.no)+'</div><div style="font-size:12px;color:var(--text3)">'+fmtD(loan.issued)+' · Due: '+fmtD(loanDueDate(loan.issued,loan.months))+'</div></div>'+
+          '<div><div style="font-weight:700;font-size:14px">'+esc(loan.no)+'</div><div style="font-size:12px;color:var(--text3)">'+fmtD(loan.issued)+' · Due: '+fmtD(loanDueDate(loan,loan.months))+'</div></div>'+
           '<span class="bdg bdg-'+(loan.status==="Declined"?"danger":loan.status==="Pending"?"warning":over?"danger":st.pct>=100?"success":"warning")+'">'+(loan.status==="Pending"?"Pending Approval":loan.status==="Declined"?"Declined":over?"OVERDUE":st.pct>=100?"Cleared":"Active")+'</span></div>'+
           '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;text-align:center">'+
           ['<div><div style="font-size:10px;color:var(--text3)">Principal</div><div style="font-weight:700;color:var(--navy)">'+fmt(loan.principal)+'</div></div>',
