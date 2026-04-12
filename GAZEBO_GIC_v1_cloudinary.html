@@ -281,11 +281,8 @@ const firebaseConfig = {
 // }
 const app = firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-// Enable offline persistence (single-tab mode) so writes survive brief outages and sync when back online.
-// This avoids the multi-tab persistence deprecation warning in current Firestore SDK logs.
-db.enablePersistence().catch(function(e){
-  if(e.code!=='failed-precondition'&&e.code!=='unimplemented'){console.warn('Firestore persistence error:',e);}
-});
+// Firestore compat persistence APIs now emit deprecation warnings and fail in multi-tab use.
+// This app relies on Firestore plus local fallback storage, so we keep Firestore on memory cache here.
 const storage = (typeof firebase!=="undefined"&&firebase.storage)?firebase.storage():null;
 // Cloudinary upload configuration (set these values for file uploads)
 // Example:
