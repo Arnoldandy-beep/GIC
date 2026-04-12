@@ -816,7 +816,7 @@ var S={
   lockouts:{},loading:true,toast:null,realtimeListenersActive:false,
   memberSearch:"",memberStatusFilter:"Active",
   finesFilter:"all",
-  savTab:"overview",savMemberId:"",loanTab:"active",loanMetricFilter:"all",intTab:"overview",expTab:"list",
+  savTab:"overview",savMemberId:"",loanTab:"all",loanMetricFilter:"all",intTab:"overview",expTab:"list",
   usersTab:"admin"
 };
 var _memberFormUploadDraft={passportPhoto:"",nidCopy:"",nidCopyName:"",nidCopyType:""};
@@ -2686,7 +2686,8 @@ function rLoanList(){
   var tab=S.loanTab||"active";
   var metric=S.loanMetricFilter||"all";
   var tabMap={active:"Active",pending:"Pending",cleared:"Cleared",declined:"Declined"};
-  var filtered=tab==="all"?S.loans:S.loans.filter(function(l){return l.status===tabMap[tab];});
+  var tabFiltered=tab==="all"?S.loans:S.loans.filter(function(l){return l.status===tabMap[tab];});
+  var filtered=tabFiltered;
   filtered=filtered.filter(function(l){
     var st=loanStat(l);
     if(metric==="overdue")return l.status==="Active"&&isOverdue(l);
@@ -2697,6 +2698,7 @@ function rLoanList(){
     if(metric==="principal-cleared")return st.outstandingPrincipal<=0;
     return true;
   });
+  var filtersHidingData=S.loans.length>0&&filtered.length===0;
   var showActions=filtered.some(function(loan){return canUserApproveLoan(loan,S.user)||hasUserApprovedLoan(loan,S.user&&S.user.id)||canManageLoanRecords(S.user)&&(loan.status==="Pending"||loan.isHistorical);});
 
   var loanStats=S.loans.map(function(l){return{loan:l,st:loanStat(l)};});
@@ -2759,13 +2761,18 @@ function rLoanList(){
     '<div><h1 class="fd page-title">Loans</h1><div class="page-sub">'+MEM_RATE+'%/mo (members) · '+NM_RATE+'%/mo (non-members) · Max '+MAX_MO+' months</div></div>'+
     (canManageLoanRecords(S.user)?'<button class="btn btn-p btn-sm" onclick="S.modal={id:\'new-loan\',size:\'modal-xl\'};render()">+ New Loan</button>':"")+
     '</div>'+loanFundsHtml+'<div class="card">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+      '<div style="font-size:11px;color:var(--text3)">Showing <strong>'+filtered.length+'</strong> of <strong>'+S.loans.length+'</strong> loan records</div>'+
+      '<div class="fl" style="gap:6px"><button class="btn btn-g btn-sm" onclick="S.loanTab=\'all\';S.loanMetricFilter=\'all\';render()">Reset To Full History</button></div>'+
+    '</div>'+
+    (filtersHidingData?'<div class="alert alert-warn" style="margin-bottom:10px">No rows matched current filters. Click <strong>Reset To Full History</strong> to restore all loan history view.</div>':'')+
     '<div class="grid4" style="margin-bottom:10px">'+
       '<div class="stat-card" style="cursor:pointer;'+(metric==="interest-pending"?'outline:2px solid var(--gold);':'')+'" onclick="S.loanMetricFilter=\'interest-pending\';render()"><div class="stat-icon" style="background:#C9A84C1A">🏦</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Pending</div><div style="font-size:14px;font-weight:700;color:var(--gold2)">'+fmt(interestPending)+'</div></div></div>'+
       '<div class="stat-card" style="cursor:pointer;'+(metric==="interest-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'interest-cleared\';render()"><div class="stat-icon" style="background:#057A551A">✅</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(interestCleared)+'</div></div></div>'+
       '<div class="stat-card" style="cursor:pointer;'+(metric==="principal-pending"?'outline:2px solid var(--red);':'')+'" onclick="S.loanMetricFilter=\'principal-pending\';render()"><div class="stat-icon" style="background:#C0392B1A">📉</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Pending</div><div style="font-size:14px;font-weight:700;color:var(--red)">'+fmt(principalPending)+'</div></div></div>'+
       '<div class="stat-card" style="cursor:pointer;'+(metric==="principal-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'principal-cleared\';render()"><div class="stat-icon" style="background:#057A551A">💵</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(principalCleared)+'</div></div></div>'+
     '</div>'+
-    '<div class="tab-bar">'+[["active","Active"],["pending","Pending"],["cleared","Cleared"],["declined","Declined"],["all","All"]].map(function(t){return'<button class="tab-btn'+(S.loanTab===t[0]?" active":"")+'" onclick="S.loanTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join("")+'</div>'+
+    '<div class="tab-bar">'+[["active","Active"],["pending","Pending"],["cleared","Cleared"],["declined","Declined"],["all","All"]].map(function(t){return'<button class="tab-btn'+(S.loanTab===t[0]?" active":"")+'" onclick="S.loanTab=\''+t[0]+'\';S.loanMetricFilter=\'all\';render()">'+t[1]+'</button>';}).join("")+'</div>'+
     '<div style="display:flex;justify-content:flex-end;margin:6px 0 10px 0"><button class="btn btn-g btn-sm" onclick="S.loanMetricFilter=\'all\';render()">Clear Loan Filter</button></div>'+
     '<div class="mobile-stack"><table class="tbl"><thead><tr><th>No.</th><th>Borrower</th><th>Principal</th><th>Interest</th><th>Rate</th><th>Due Date</th><th>Outstanding</th><th>Status</th>'+(showActions?'<th>Actions</th>':'')+'</tr></thead>'+
     '<tbody>'+(rows||'<tr><td colspan="'+(showActions?9:8)+'" class="no-data">No loans in this category</td></tr>')+'</tbody></table></div></div></div>';
@@ -4018,7 +4025,17 @@ function mDeclineLoan(){
 }
 
 // ─── 29. ACTIONS ───────────────────────────────────
-function goPage(p){pushNav();S.page=p;S.view="list";S.selId=null;render();}
+function goPage(p){
+  pushNav();
+  S.page=p;
+  S.view="list";
+  S.selId=null;
+  if(p==="loans"){
+    S.loanTab="all";
+    S.loanMetricFilter="all";
+  }
+  render();
+}
 function goMemberDetail(id){pushNav();S.page="members";S.view="member-detail";S.selId=id;render();}
 function goLoanDetail(id){pushNav();S.page="loans";S.view="loan-detail";S.selId=id;render();}
 function goLoanListFilter(tab,metric){
