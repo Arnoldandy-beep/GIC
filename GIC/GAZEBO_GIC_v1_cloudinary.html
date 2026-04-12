@@ -1471,6 +1471,18 @@ function loanStat(loan,asOfDate){
   var normalizedMonthly=loan.months>0?Math.round(totalDue/loan.months):0;
   var installmentsPaid=normalizedMonthly>0?Math.min(loan.months,Math.floor(applied/normalizedMonthly)):0;
   var partialInstallmentAmount=normalizedMonthly>0?applied-(installmentsPaid*normalizedMonthly):0;
+  if(loan&&loan.status==="Cleared"){
+    // Cleared loans should never show pending balances even when recovered from partial audit data.
+    paid=Math.max(paid,totalDue);
+    applied=totalDue;
+    paidInterest=totalInterestDue;
+    paidPrincipal=loan.principal;
+    outstandingInterest=0;
+    outstandingPrincipal=0;
+    outstanding=0;
+    installmentsPaid=loan.months||0;
+    partialInstallmentAmount=0;
+  }
   return{
     total:totalDue,
     paid:paid,
@@ -2702,10 +2714,12 @@ function rLoanList(){
   var showActions=filtered.some(function(loan){return canUserApproveLoan(loan,S.user)||hasUserApprovedLoan(loan,S.user&&S.user.id)||canManageLoanRecords(S.user)&&(loan.status==="Pending"||loan.isHistorical);});
 
   var loanStats=S.loans.map(function(l){return{loan:l,st:loanStat(l)};});
-  var interestPending=loanStats.reduce(function(t,x){return t+x.st.outstandingInterest;},0);
-  var interestCleared=loanStats.reduce(function(t,x){return t+x.st.paidInterest;},0);
-  var principalPending=loanStats.reduce(function(t,x){return t+x.st.outstandingPrincipal;},0);
-  var principalCleared=loanStats.reduce(function(t,x){return t+x.st.paidPrincipal;},0);
+  var pendingOrActiveStats=loanStats.filter(function(x){return x.loan.status==="Pending"||x.loan.status==="Active";});
+  var clearedStats=loanStats.filter(function(x){return x.loan.status==="Cleared";});
+  var interestPending=pendingOrActiveStats.reduce(function(t,x){return t+x.st.outstandingInterest;},0);
+  var interestCleared=clearedStats.reduce(function(t,x){return t+x.st.paidInterest;},0);
+  var principalPending=pendingOrActiveStats.reduce(function(t,x){return t+x.st.outstandingPrincipal;},0);
+  var principalCleared=clearedStats.reduce(function(t,x){return t+x.st.paidPrincipal;},0);
 
   var rows=filtered.map(function(loan){
     var st=loanStat(loan),over=isOverdue(loan);
@@ -2734,26 +2748,24 @@ function rLoanList(){
       '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:'+(lf.available>0?"var(--green)":"var(--red)")+'">'+ fmt(lf.available)+'</div>'+
         '<div style="font-size:10px;color:var(--text3)">Available to deploy</div></div></div>'+
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:10px">'+
-      [['📤 Deployed Active Loans',fmt(portfolio.outstandingPrincipal),'var(--red)'],
-       ['🏦 Total Interest on Active Loans',fmt(portfolio.interestActive),'var(--gold2)'],
-       ['🚨 Interest on Overdue Loans',fmt(portfolio.overdueInterest),'var(--red)'],
-       ['💼 Principle on All Loans',fmt(totalPrincipalAllLoans),'var(--navy)'],
-       ['✅ Closed Loans',portfolio.closedLoanCount+' loan(s)','var(--green)'],
-       ['🏁 Interest on Closed Loans',fmt(portfolio.interestClosed),'var(--green)']].map(function(x){
-        return'<div style="background:var(--bg);border-radius:8px;padding:8px 10px">'+
+      [['📤 Deployed Active Loans',fmt(portfolio.outstandingPrincipal),'var(--red)','goLoanListFilter(\'active\',\'outstanding\')'],
+       ['🏦 Total Interest on Active Loans',fmt(portfolio.interestActive),'var(--gold2)','goLoanListFilter(\'active\',\'interest-pending\')'],
+       ['🚨 Interest on Overdue Loans',fmt(portfolio.overdueInterest),'var(--red)','goLoanListFilter(\'active\',\'overdue\')'],
+       ['💼 Principal on All Loans',fmt(totalPrincipalAllLoans),'var(--navy)','goLoanListFilter(\'all\',\'all\')'],
+       ['✅ Closed Loans',portfolio.closedLoanCount+' loan(s)','var(--green)','goLoanListFilter(\'cleared\',\'all\')'],
+       ['🏁 Interest on Closed Loans',fmt(portfolio.interestClosed),'var(--green)','goLoanListFilter(\'cleared\',\'interest-cleared\')']].map(function(x){
+        return'<button type="button" class="btn" onclick="'+x[3]+'" style="background:var(--bg);border:1px solid var(--gray2);border-radius:8px;padding:8px 10px;text-align:left">'+
           '<div style="font-size:10px;color:var(--text3);font-weight:600">'+x[0]+'</div>'+
-          '<div style="font-size:13px;font-weight:700;color:'+x[2]+';margin-top:2px">'+x[1]+'</div></div>';}).join("")+
+          '<div style="font-size:13px;font-weight:700;color:'+x[2]+';margin-top:2px">'+x[1]+'</div></button>';}).join("")+
     '</div>'+
     '<div style="margin-bottom:6px">'+
-      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
       '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
         '<span style="color:var(--text3)">Pool Utilisation (principal outstanding/pool)</span>'+
         '<span style="font-weight:700;color:'+(lf.utilizationPct>80?"var(--red)":lf.utilizationPct>60?"var(--gold)":"var(--green)")+'">'+lf.utilizationPct+'%</span></div>'+
       '<div class="progress-bar"><div class="progress-fill" style="width:'+Math.min(100,lf.utilizationPct)+'%;background:'+(lf.utilizationPct>80?"var(--red)":lf.utilizationPct>60?"var(--gold)":"var(--green)")+'"></div></div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--text3);background:var(--bg);border-radius:6px;padding:7px 10px">'+
-      '<strong>Formula:</strong> Available = Savings Pool − Deployed Principal + Recovered Principal &nbsp;·&nbsp; '+
-        '<strong>Formula:</strong> Available = Savings Pool − Principal Outstanding &nbsp;·&nbsp; '+
+      '<strong>Formula:</strong> Available = Savings Pool − Principal Outstanding &nbsp;·&nbsp; '+
       'Pool excludes exited members\' returned funds</div>'+
   '</div>';
 
@@ -2767,10 +2779,10 @@ function rLoanList(){
     '</div>'+
     (filtersHidingData?'<div class="alert alert-warn" style="margin-bottom:10px">No rows matched current filters. Click <strong>Reset To Full History</strong> to restore all loan history view.</div>':'')+
     '<div class="grid4" style="margin-bottom:10px">'+
-      '<div class="stat-card" style="cursor:pointer;'+(metric==="interest-pending"?'outline:2px solid var(--gold);':'')+'" onclick="S.loanMetricFilter=\'interest-pending\';render()"><div class="stat-icon" style="background:#C9A84C1A">🏦</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Pending</div><div style="font-size:14px;font-weight:700;color:var(--gold2)">'+fmt(interestPending)+'</div></div></div>'+
-      '<div class="stat-card" style="cursor:pointer;'+(metric==="interest-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'interest-cleared\';render()"><div class="stat-icon" style="background:#057A551A">✅</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(interestCleared)+'</div></div></div>'+
-      '<div class="stat-card" style="cursor:pointer;'+(metric==="principal-pending"?'outline:2px solid var(--red);':'')+'" onclick="S.loanMetricFilter=\'principal-pending\';render()"><div class="stat-icon" style="background:#C0392B1A">📉</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Pending</div><div style="font-size:14px;font-weight:700;color:var(--red)">'+fmt(principalPending)+'</div></div></div>'+
-      '<div class="stat-card" style="cursor:pointer;'+(metric==="principal-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'principal-cleared\';render()"><div class="stat-icon" style="background:#057A551A">💵</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(principalCleared)+'</div></div></div>'+
+      '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="interest-pending"?'outline:2px solid var(--gold);':'')+'" onclick="S.loanMetricFilter=\'interest-pending\';render()"><div class="stat-icon" style="background:#C9A84C1A">🏦</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Pending</div><div style="font-size:14px;font-weight:700;color:var(--gold2)">'+fmt(interestPending)+'</div></div></button>'+
+      '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="interest-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'interest-cleared\';render()"><div class="stat-icon" style="background:#057A551A">✅</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Interest Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(interestCleared)+'</div></div></button>'+
+      '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="principal-pending"?'outline:2px solid var(--red);':'')+'" onclick="S.loanMetricFilter=\'principal-pending\';render()"><div class="stat-icon" style="background:#C0392B1A">📉</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Pending</div><div style="font-size:14px;font-weight:700;color:var(--red)">'+fmt(principalPending)+'</div></div></button>'+
+      '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="principal-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'principal-cleared\';render()"><div class="stat-icon" style="background:#057A551A">💵</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(principalCleared)+'</div></div></button>'+
     '</div>'+
     '<div class="tab-bar">'+[["active","Active"],["pending","Pending"],["cleared","Cleared"],["declined","Declined"],["all","All"]].map(function(t){return'<button class="tab-btn'+(S.loanTab===t[0]?" active":"")+'" onclick="S.loanTab=\''+t[0]+'\';S.loanMetricFilter=\'all\';render()">'+t[1]+'</button>';}).join("")+'</div>'+
     '<div style="display:flex;justify-content:flex-end;margin:6px 0 10px 0"><button class="btn btn-g btn-sm" onclick="S.loanMetricFilter=\'all\';render()">Clear Loan Filter</button></div>'+
