@@ -1524,6 +1524,44 @@ function loanSecurityRequiredAmount(principal){
   // Loan security is principal-only; interest is not locked as collateral.
   return Math.max(0,Number(principal)||0);
 }
+function normalizeMemberRefText(v){
+  return String(v||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+}
+function resolveMemberFromLoanRef(refText){
+  var ref=normalizeMemberRefText(refText);
+  if(!ref)return null;
+  return S.members.filter(function(m){
+    return normalizeMemberRefText(m.id)===ref||normalizeMemberRefText(m.no)===ref||normalizeMemberRefText(m.fullName)===ref;
+  })[0]||null;
+}
+function hydrateLoanMemberLinks(loan){
+  if(!loan)return loan;
+  var next=Object.assign({},loan);
+  var changed=false;
+  var borrowerMember=next.memberId?S.members.filter(function(m){return m.id===next.memberId;})[0]:null;
+  if(!borrowerMember){
+    borrowerMember=resolveMemberFromLoanRef(next.memberNo||next.borrower);
+    if(borrowerMember&&next.memberId!==borrowerMember.id){next.memberId=borrowerMember.id;changed=true;}
+    if(borrowerMember&&next.isMember!==true){next.isMember=true;changed=true;}
+  }
+  if(borrowerMember&&next.borrower!==borrowerMember.fullName){next.borrower=borrowerMember.fullName;changed=true;}
+  if(borrowerMember&&next.memberNo!==borrowerMember.no){next.memberNo=borrowerMember.no;changed=true;}
+
+  var g1Member=next.g1Id?S.members.filter(function(m){return m.id===next.g1Id;})[0]:null;
+  if(!g1Member&&next.g1Name){
+    g1Member=resolveMemberFromLoanRef(next.g1Name);
+    if(g1Member&&next.g1Id!==g1Member.id){next.g1Id=g1Member.id;changed=true;}
+  }
+  if(g1Member&&next.g1Name!==g1Member.fullName){next.g1Name=g1Member.fullName;changed=true;}
+
+  var g2Member=next.g2Id?S.members.filter(function(m){return m.id===next.g2Id;})[0]:null;
+  if(!g2Member&&next.g2Name){
+    g2Member=resolveMemberFromLoanRef(next.g2Name);
+    if(g2Member&&next.g2Id!==g2Member.id){next.g2Id=g2Member.id;changed=true;}
+  }
+  if(g2Member&&next.g2Name!==g2Member.fullName){next.g2Name=g2Member.fullName;changed=true;}
+  return changed?next:loan;
+}
 function isOverdue(loan){return loan.status==="Active"&&getLoanPenaltyMonths(loan)>0;}
 function loanSecurityCheck(bid,g1,g2,total){
   var b=bid?memberAvailSavings(bid):0,g1s=g1?memberAvailSavings(g1):0,g2s=g2?memberAvailSavings(g2):0;
@@ -1566,6 +1604,7 @@ function normalizeLoanGuarantorLocks(){
   var changed=false;
   S.loans=S.loans.map(function(loan){
     if(!loan||loan.status==="Declined"||loan.status==="Cleared")return loan;
+    loan=hydrateLoanMemberLinks(loan);
     var secRequired=loanSecurityRequiredAmount(loan.principal);
     var sec=loanSecurityCheck(loan.memberId,loan.g1Id,loan.g2Id,secRequired);
     var alloc=calcLoanLockAllocation(sec,secRequired);
@@ -4266,6 +4305,7 @@ async function restoreLoansFromBackup(){
       return {id:gid(),loanId:loanId,amount:amount,date:date,notes:"Restored from backup",ref:String(r["Ref"]||("RPY-REST-"+String(idx+1).padStart(3,"0"))),by:S.user?S.user.username:"system",paymentMode:"installment"};
     }).filter(function(x){return !!x;});
 
+    restoredLoans=restoredLoans.map(function(loan){return hydrateLoanMemberLinks(loan);});
     if(replace){
       S.loans=restoredLoans;
       S.repayments=restoredRepayments;
@@ -4356,7 +4396,7 @@ async function restoreLoansFromAuditLog(){
       }
     });
 
-    var recoveredLoans=Object.keys(loansByNo).map(function(no){return loansByNo[no];});
+    var recoveredLoans=Object.keys(loansByNo).map(function(no){return hydrateLoanMemberLinks(loansByNo[no]);});
     if(!recoveredLoans.length){showToast("No recoverable loan entries found in audit log","err");return;}
     var loanIdByNo={};recoveredLoans.forEach(function(l){loanIdByNo[l.no]=l.id;});
     var recoveredRepayments=repayments.map(function(r){return Object.assign({},r,{loanId:loanIdByNo[r.loanNo]||""});}).filter(function(r){return !!r.loanId;}).map(function(r){delete r.loanNo;return r;});
@@ -5842,6 +5882,7 @@ async function init(){
   }catch(migErr){
     console.warn("Inline member attachment migration skipped:",migErr);
   }
+  S.loans=S.loans.map(function(loan){return hydrateLoanMemberLinks(loan);});
   if(normalizeLoanGuarantorLocks()){
     await DB.set(K.loans,S.loans);
   }
