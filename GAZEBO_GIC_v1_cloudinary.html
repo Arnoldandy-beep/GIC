@@ -621,7 +621,7 @@ var MGRID=[
 // ─── 4. DB ─────────────────────────────────────────
 var K={seeded:"gic:seeded6",users:"gic:users",members:"gic:members",savings:"gic:savings",
   loans:"gic:loans",repayments:"gic:repayments",interest:"gic:interest",
-  amendments:"gic:amendments",expenses:"gic:expenses",operationalIncome:"gic:operationalIncome",lockouts:"gic:lockouts",notifications:"gic:notifications"};
+  amendments:"gic:amendments",expenses:"gic:expenses",operationalIncome:"gic:operationalIncome",lockouts:"gic:lockouts",notifications:"gic:notifications",membersBackupLatest:"gic:members:backup:latest"};
 function sanitizeForDb(value){
   if(value===undefined)return null;
   if(value===null)return null;
@@ -656,6 +656,9 @@ var DB={
   },
   set: async function(k, v) {
     var clean=sanitizeForDb(v);
+    if(k===K.members&&Array.isArray(clean)&&clean.length){
+      _store.set(K.membersBackupLatest,clean);
+    }
     try {
       await db.collection('data').doc(k).set({ value: clean });
       DB._fbOk=true;
@@ -1440,9 +1443,9 @@ function memberAvailSavings(mid,excLoan){
     var changed=false;
     S.loans=S.loans.map(function(loan){
       if(!loan||loan.status==="Declined"||loan.status==="Cleared")return loan;
-      var totalDue=calcLoan(loan.principal,loan.rate,loan.months).total;
-      var sec=loanSecurityCheck(loan.memberId,loan.g1Id,loan.g2Id,totalDue);
-      var alloc=calcLoanLockAllocation(sec,totalDue);
+      var secRequired=loanSecurityRequiredAmount(loan.principal);
+      var sec=loanSecurityCheck(loan.memberId,loan.g1Id,loan.g2Id,secRequired);
+      var alloc=calcLoanLockAllocation(sec,secRequired);
       if((loan.lockedBorrower||0)!==alloc.borrower||(loan.lockedG1||0)!==alloc.g1||(loan.lockedG2||0)!==alloc.g2){
         changed=true;
         return Object.assign({},loan,{lockedBorrower:alloc.borrower,lockedG1:alloc.g1,lockedG2:alloc.g2});
@@ -1520,6 +1523,10 @@ function calcLoanPenaltyInterest(loan,penaltyMonths){
   if(!loan||!penaltyMonths||penaltyMonths<=0)return 0;
   return Math.round((Number(loan.principal)||0)*((Number(loan.rate)||0)/100)*penaltyMonths);
 }
+function loanSecurityRequiredAmount(principal){
+  // Loan security is principal-only; interest is not locked as collateral.
+  return Math.max(0,Number(principal)||0);
+}
 function isOverdue(loan){return loan.status==="Active"&&getLoanPenaltyMonths(loan)>0;}
 function loanSecurityCheck(bid,g1,g2,total){
   var b=bid?memberAvailSavings(bid):0,g1s=g1?memberAvailSavings(g1):0,g2s=g2?memberAvailSavings(g2):0;
@@ -1562,9 +1569,9 @@ function normalizeLoanGuarantorLocks(){
   var changed=false;
   S.loans=S.loans.map(function(loan){
     if(!loan||loan.status==="Declined"||loan.status==="Cleared")return loan;
-    var totalDue=calcLoan(loan.principal,loan.rate,loan.months).total;
-    var sec=loanSecurityCheck(loan.memberId,loan.g1Id,loan.g2Id,totalDue);
-    var alloc=calcLoanLockAllocation(sec,totalDue);
+    var secRequired=loanSecurityRequiredAmount(loan.principal);
+    var sec=loanSecurityCheck(loan.memberId,loan.g1Id,loan.g2Id,secRequired);
+    var alloc=calcLoanLockAllocation(sec,secRequired);
     var nextBorrower=alloc.borrower;
     var nextG1=alloc.g1;
     var nextG2=alloc.g2;
@@ -3067,6 +3074,7 @@ function rReports(){
   return'<div class="fadein"><div class="page-hdr"><div><h1 class="fd page-title">Reports</h1><div class="page-sub">'+MS[n.getMonth()]+' '+n.getFullYear()+'</div></div>'+
     '<div class="fl" style="gap:8px;flex-wrap:wrap">'+
       '<button class="btn btn-p btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>'+
+      (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreMembersFromLocalBackup()">👥 Restore Members Backup</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'restore-loans\'};render()">♻️ Restore Loans Backup</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreLoansFromAuditLog()">🧾 Recover Loans From Audit</button>':'')+
       (canClearData?'<button class="btn btn-d btn-sm" onclick="clearAllHavingsData()">🧹 Clear all savings/loan/expense data</button>':'')+
@@ -4491,6 +4499,23 @@ async function clearAllHavingsData(){
   showToast("All core data cleared. Ready for new data entry.","ok");
   render();
 }
+async function restoreMembersFromLocalBackup(){
+  if(!S.user||!(S.user.access==="full"||S.user.access==="treasurer"||S.user.access==="secretary")){
+    showToast("Only admin, treasurer or secretary can restore member backup","err");
+    return;
+  }
+  var backup=_store.get(K.membersBackupLatest);
+  if(!Array.isArray(backup)||!backup.length){
+    showToast("No local members backup found on this device/browser","err");
+    return;
+  }
+  if(!confirm("Restore members from latest local backup? This replaces current member records."))return;
+  S.members=backup;
+  await DB.set(K.members,S.members);
+  logEvent("CONFIG",S.user.name,"Members restored from local backup snapshot: "+S.members.length+" records");
+  showToast("Members restored from local backup: "+S.members.length,"ok");
+  render();
+}
 function noticeWhatsApp(mid){
   var m=S.members.filter(function(x){return x.id===mid;})[0];if(!m)return false;
   var text=(document.getElementById("notice-text")||{value:""}).value||"Savings reminder from GAZEBO Investment Club.";
@@ -5300,15 +5325,16 @@ function updateLoanCalc(){
   var collV=Number((document.getElementById("lf-collValue")||{value:0}).value||0);
   var secEl=document.getElementById("loan-sec-check");
   if(secEl&&(bid||g1||g2)){
-    var sec=loanSecurityCheck(bid,g1,g2,c.total);var eff=sec.combined+(isMember?0:collV);
-    var alloc=calcLoanLockAllocation(sec,c.total);
-    var cov=c.total>0?Math.round((eff/c.total)*100):0;
-    secEl.style.display="";secEl.className="alert alert-"+(eff>=c.total?"ok":"err");
+    var secRequired=loanSecurityRequiredAmount(p);
+    var sec=loanSecurityCheck(bid,g1,g2,secRequired);var eff=sec.combined+(isMember?0:collV);
+    var alloc=calcLoanLockAllocation(sec,secRequired);
+    var cov=secRequired>0?Math.round((eff/secRequired)*100):0;
+    secEl.style.display="";secEl.className="alert alert-"+(eff>=secRequired?"ok":"err");
     secEl.innerHTML="Security: B="+fmt(sec.bSav)+" + G1="+fmt(sec.g1Sav)+" + G2="+fmt(sec.g2Sav)+((!isMember)?" + Coll="+fmt(collV):"")+
-      " = <strong>"+fmt(eff)+"</strong> vs <strong>"+fmt(c.total)+"</strong> → "+cov+"% "+(eff>=c.total?"✅ OK":"❌ Insufficient")+
+      " = <strong>"+fmt(eff)+"</strong> vs <strong>"+fmt(secRequired)+"</strong> → "+cov+"% "+(eff>=secRequired?"✅ OK":"❌ Insufficient")+
       '<br><span style="font-size:11px;color:var(--text3)">Planned lock: Borrower '+fmt(alloc.borrower)+' · G1 '+fmt(alloc.g1)+' · G2 '+fmt(alloc.g2)+'</span>';
       var borrowerAvail=memberAvailSavings(bid);
-      var guarantorReqAmt=c.total>borrowerAvail?Math.ceil((c.total-borrowerAvail)/2):0;
+      var guarantorReqAmt=secRequired>borrowerAvail?Math.ceil((secRequired-borrowerAvail)/2):0;
       var warnEl=document.getElementById("g2-qualify-warn");
       if(warnEl){
         if(g1Cur&&(document.getElementById("lf-g2")||{value:""}).value){
@@ -5368,10 +5394,11 @@ async function submitLoan(){
   if(isHistorical&&historyStatus==="Cleared"&&!clearedAt){showToast("Provide paid off date for a cleared historical loan","err");return;}
   var maxMo=maxLoanMonths(issued);if(months>maxMo){showToast("Max "+maxMo+" months for this date","err");return;}
   var c=calcLoan(principal,rate,months);
-  var sec=loanSecurityCheck(memberId,g1Id,g2Id,c.total);
-  var effectiveSec=sec.combined+(isMember?0:collValue);var sufficient=effectiveSec>=c.total;
+  var secRequired=loanSecurityRequiredAmount(principal);
+  var sec=loanSecurityCheck(memberId,g1Id,g2Id,secRequired);
+  var effectiveSec=sec.combined+(isMember?0:collValue);var sufficient=effectiveSec>=secRequired;
   var g1M=S.members.filter(function(m){return m.id===g1Id;})[0]||{};var g2M=S.members.filter(function(m){return m.id===g2Id;})[0]||{};
-  var lockAlloc=calcLoanLockAllocation(sec,c.total);
+  var lockAlloc=calcLoanLockAllocation(sec,secRequired);
   var lb=sufficient?lockAlloc.borrower:0,lg1=sufficient?lockAlloc.g1:0,lg2=sufficient?lockAlloc.g2:0;
   // Generate next sequential loan number without gaps
   var maxLoanNum=0;
@@ -5403,7 +5430,7 @@ async function submitLoan(){
     showToast("Historical loan "+no+" recorded as "+loan.status,"ok");
     S.loanTab=loan.status==="Cleared"?"cleared":"active";
   }else if(!sufficient){
-    showToast("Auto-declined: Insufficient security ("+fmt(effectiveSec)+" < "+fmt(c.total)+")","err");
+    showToast("Auto-declined: Insufficient security ("+fmt(effectiveSec)+" < "+fmt(secRequired)+")","err");
     S.loanTab="declined";
   }else{
     showToast("Loan "+no+" submitted — pending approval","info");
@@ -5439,10 +5466,11 @@ async function updateLoanSubmission(lid){
   if(isHistorical&&historyStatus==="Cleared"&&!clearedAt){showToast("Provide paid off date for a cleared legacy loan","err");return;}
   var maxMo=maxLoanMonths(issued);if(months>maxMo){showToast("Max "+maxMo+" months for this date","err");return;}
   var c=calcLoan(principal,rate,months);
-  var sec=loanSecurityCheck(memberId,g1Id,g2Id,c.total);
-  var effectiveSec=sec.combined+(isMember?0:collValue);var sufficient=effectiveSec>=c.total;
+  var secRequired=loanSecurityRequiredAmount(principal);
+  var sec=loanSecurityCheck(memberId,g1Id,g2Id,secRequired);
+  var effectiveSec=sec.combined+(isMember?0:collValue);var sufficient=effectiveSec>=secRequired;
   var g1M=S.members.filter(function(m){return m.id===g1Id;})[0]||{};var g2M=S.members.filter(function(m){return m.id===g2Id;})[0]||{};
-  var lockAlloc=calcLoanLockAllocation(sec,c.total);
+  var lockAlloc=calcLoanLockAllocation(sec,secRequired);
   var lb=sufficient?lockAlloc.borrower:0,lg1=sufficient?lockAlloc.g1:0,lg2=sufficient?lockAlloc.g2:0;
   var finalStatus=isHistorical?(historyStatus==="Cleared"||!!clearedAt?"Cleared":"Active"):(sufficient?"Pending":"Declined");
   var manualPaidTotal=isHistorical&&finalStatus==="Cleared"?(principal+(realizedInterest||0)):0;
@@ -5804,7 +5832,7 @@ async function init(){
       await DB.set(K.users,mergedUsers);
     }
     S.users=mergedUsers;
-    S.members=await DB.get(K.members)||SEED_MEMBERS;
+    S.members=await DB.get(K.members)||_store.get(K.membersBackupLatest)||SEED_MEMBERS;
     S.savings=await DB.get(K.savings)||[];S.loans=await DB.get(K.loans)||[];
     S.repayments=await DB.get(K.repayments)||[];S.interest=await DB.get(K.interest)||[];
     S.amendments=await DB.get(K.amendments)||[];S.expenses=await DB.get(K.expenses)||[];S.operationalIncome=await DB.get(K.operationalIncome)||[];
