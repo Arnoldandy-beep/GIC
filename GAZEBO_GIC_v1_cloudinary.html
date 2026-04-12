@@ -2978,6 +2978,7 @@ function rReports(){
   return'<div class="fadein"><div class="page-hdr"><div><h1 class="fd page-title">Reports</h1><div class="page-sub">'+MS[n.getMonth()]+' '+n.getFullYear()+'</div></div>'+
     '<div class="fl" style="gap:8px;flex-wrap:wrap">'+
       '<button class="btn btn-p btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>'+
+      (canClearData?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'restore-loans\'};render()">♻️ Restore Loans Backup</button>':'')+
       (canClearData?'<button class="btn btn-d btn-sm" onclick="clearAllHavingsData()">🧹 Clear all savings/loan/expense data</button>':'')+
     '</div></div>'+
     '<div class="grid4" style="margin-bottom:14px">'+
@@ -3390,7 +3391,7 @@ function rModalContent(){
     "calc-interest":mCalcInterest,"offboard":mOffboard,"add-user":mAddUser,"edit-user":mEditUser,
     "decline-loan":mDeclineLoan,"edit-loan":mEditLoan,"amend-savings":mAmendSavings,"add-expense":mAddExpense,"add-operational-income":mAddOperationalIncome,
     "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment,
-    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine};
+    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans};
   return(map[m.id]||function(){return"";})();
 }
 
@@ -4024,6 +4025,19 @@ function mDeclineLoan(){
     mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-d" onclick="confirmDeclineLoan(\''+lid+'\')">Confirm Decline</button>');
 }
 
+function mRestoreLoans(){
+  return mhdr("Restore Loans From Backup")+
+    '<div class="mbody">'+
+      '<div class="alert alert-warn" style="font-size:12px">Use an Excel backup exported from this system. The importer reads <strong>Loans</strong> and <strong>Repayments</strong> sheets and restores your loan history as historical records.</div>'+
+      '<div class="fg">'+
+        '<div class="full"><label class="form-label">Backup File (.xlsx)</label><input class="inp" type="file" id="restore-loans-file" accept=".xlsx,.xls"></div>'+
+        '<div class="full"><label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox" id="restore-loans-replace" checked> Replace current loans and repayments with backup contents</label></div>'+
+      '</div>'+
+      '<div class="alert alert-info" style="font-size:12px;margin-top:10px">After restore, your new repayment logic remains active: installment pays interest first, and interest-only mode is available.</div>'+
+    '</div>'+
+    mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="restoreLoansFromBackup()">♻️ Restore Now</button>');
+}
+
 // ─── 29. ACTIONS ───────────────────────────────────
 function goPage(p){
   pushNav();
@@ -4035,6 +4049,100 @@ function goPage(p){
     S.loanMetricFilter="all";
   }
   render();
+}
+
+function parseBackupNumber(v){
+  if(v==null||v==="")return 0;
+  if(typeof v==="number")return Number.isFinite(v)?v:0;
+  var n=Number(String(v).replace(/[^\d.-]/g,""));
+  return Number.isFinite(n)?n:0;
+}
+function parseBackupRate(v){
+  if(v==null||v==="")return MEM_RATE;
+  if(typeof v==="number")return Number.isFinite(v)?v:MEM_RATE;
+  var s=String(v);
+  var m=s.match(/-?\d+(?:\.\d+)?/);
+  return m?Number(m[0]):MEM_RATE;
+}
+function parseBackupDate(v){
+  if(!v)return"";
+  if(typeof v==="number"&&typeof XLSX!=="undefined"&&XLSX.SSF&&XLSX.SSF.parse_date_code){
+    var dc=XLSX.SSF.parse_date_code(v);
+    if(dc&&dc.y&&dc.m&&dc.d)return dc.y+"-"+String(dc.m).padStart(2,"0")+"-"+String(dc.d).padStart(2,"0");
+  }
+  var d=v instanceof Date?v:new Date(v);
+  if(isNaN(d.getTime()))return"";
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+async function restoreLoansFromBackup(){
+  var fileEl=document.getElementById("restore-loans-file");
+  if(!fileEl||!fileEl.files||!fileEl.files[0]){showToast("Choose an Excel backup file","err");return;}
+  if(typeof XLSX==="undefined"){showToast("SheetJS not loaded","err");return;}
+  try{
+    var file=fileEl.files[0];
+    var arr=await file.arrayBuffer();
+    var wb=XLSX.read(arr,{type:"array"});
+    var wsLoans=wb.Sheets["Loans"];
+    var wsReps=wb.Sheets["Repayments"];
+    if(!wsLoans){showToast("Loans sheet not found in backup","err");return;}
+    var loansRaw=XLSX.utils.sheet_to_json(wsLoans,{defval:""});
+    var repsRaw=wsReps?XLSX.utils.sheet_to_json(wsReps,{defval:""}):[];
+    if(!loansRaw.length){showToast("Backup has no loan rows","err");return;}
+
+    var replace=!!(document.getElementById("restore-loans-replace")||{checked:true}).checked;
+    var restoredLoans=loansRaw.map(function(r,idx){
+      var no=String(r["No."]||r["Loan"]||("GIC-L-REST-"+(idx+1))).trim();
+      var borrower=String(r["Borrower"]||"Unknown Borrower").trim();
+      var principal=parseBackupNumber(r["Principal"]);
+      var rate=parseBackupRate(r["Rate"]);
+      var months=Math.max(1,Math.round(parseBackupNumber(r["Months"])||6));
+      var issued=parseBackupDate(r["Taken Date"])||todayStr();
+      var approvedAt=parseBackupDate(r["Approved Date"]);
+      var disbursedAt=parseBackupDate(r["Disbursed Date"]);
+      var clearedAt=parseBackupDate(r["Paid Off Date"]);
+      var status=String(r["Status"]||"Active").trim()||"Active";
+      var paidTotal=parseBackupNumber(r["Paid"]);
+      var realizedInterest=parseBackupNumber(r["Interest"]);
+      return {
+        id:gid(),no:no,memberId:null,borrower:borrower,isMember:true,
+        principal:principal,rate:rate,months:months,purpose:"Restored from backup",issued:issued,
+        g1Id:"",g1Name:"",g2Id:"",g2Name:"",collateralDesc:"",collateralValue:0,
+        lockedBorrower:0,lockedG1:0,lockedG2:0,
+        approvals:[],requiredApprovals:loanApprovalThreshold(),approvedBy:String(r["Approved By"]||"Backup Restore"),
+        status:status,declineReason:"",submittedBy:S.user?S.user.username:"system",submittedAt:todayStr(),
+        isHistorical:true,manualRealizedInterest:realizedInterest,manualPaidTotal:paidTotal,
+        approvedAt:approvedAt||issued,disbursedAt:disbursedAt||approvedAt||issued,
+        clearedAt:(status==="Cleared"?(clearedAt||todayStr()):"")
+      };
+    });
+
+    var loanIdByNo={};
+    restoredLoans.forEach(function(l){loanIdByNo[l.no]=l.id;});
+    var restoredRepayments=repsRaw.map(function(r,idx){
+      var loanNo=String(r["Loan"]||"").trim();
+      var amount=parseBackupNumber(r["Amount"]);
+      var date=parseBackupDate(r["Date"])||todayStr();
+      var loanId=loanIdByNo[loanNo]||"";
+      if(!loanId||amount<=0)return null;
+      return {id:gid(),loanId:loanId,amount:amount,date:date,notes:"Restored from backup",ref:String(r["Ref"]||("RPY-REST-"+String(idx+1).padStart(3,"0"))),by:S.user?S.user.username:"system",paymentMode:"installment"};
+    }).filter(function(x){return !!x;});
+
+    if(replace){
+      S.loans=restoredLoans;
+      S.repayments=restoredRepayments;
+    }else{
+      S.loans=S.loans.concat(restoredLoans);
+      S.repayments=S.repayments.concat(restoredRepayments);
+    }
+    await DB.set(K.loans,S.loans);
+    await DB.set(K.repayments,S.repayments);
+    logEvent("CONFIG",S.user?S.user.name:"System","Loans restored from backup: "+restoredLoans.length+" loans, "+restoredRepayments.length+" repayments");
+    S.page="loans";S.view="list";S.loanTab="all";S.loanMetricFilter="all";
+    closeModal();showToast("Loans restored: "+restoredLoans.length+" loans, "+restoredRepayments.length+" repayments","ok");render();
+  }catch(e){
+    console.error("Restore failed",e);
+    showToast("Restore failed: "+(e.message||"unknown error"),"err");
+  }
 }
 function goMemberDetail(id){pushNav();S.page="members";S.view="member-detail";S.selId=id;render();}
 function goLoanDetail(id){pushNav();S.page="loans";S.view="loan-detail";S.selId=id;render();}
