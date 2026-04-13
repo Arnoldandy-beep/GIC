@@ -132,6 +132,15 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
 .exp-card{border-left:4px solid var(--red);background:white;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px #00000010}
 .exp-card.approved{border-left-color:var(--green)}
 .exp-card.pending{border-left-color:var(--gold)}
+.minutes-wrap{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.minute-card{background:white;border:1px solid var(--gray2);border-radius:12px;padding:14px;box-shadow:0 1px 5px #00000012;display:flex;flex-direction:column;gap:10px}
+.minute-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.minute-title{font-size:15px;font-weight:700;color:var(--navy);line-height:1.3}
+.minute-meta{font-size:11px;color:var(--text3)}
+.minute-summary{font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap}
+.minute-files{display:flex;flex-wrap:wrap;gap:6px}
+.minute-file-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--gray2);border-radius:20px;background:var(--gray1);font-size:11px;color:var(--text2);max-width:100%}
+.minute-actions{display:flex;gap:6px;flex-wrap:wrap}
 
 /* ─── MOBILE (≤ 768px) ─── */
 @media (max-width:768px){
@@ -152,6 +161,8 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
   .member-savings-page .card{padding:12px}
   .member-savings-page .tbl th,.member-savings-page .tbl td{padding:6px 8px}
   .member-nav-inline .bn-item{padding:8px 4px;font-size:9px}
+  .minutes-wrap{grid-template-columns:1fr}
+  .minute-card{padding:12px}
   .fg{grid-template-columns:1fr!important}.fg3{grid-template-columns:1fr 1fr!important}
   .full{grid-column:1/-1}
   .modal{border-radius:16px 16px 0 0;max-height:92vh;margin:0;position:fixed;bottom:0;left:0;right:0;max-width:100%!important}
@@ -618,7 +629,7 @@ var MGRID=[
 // ─── 4. DB ─────────────────────────────────────────
 var K={seeded:"gic:seeded6",users:"gic:users",members:"gic:members",savings:"gic:savings",
   loans:"gic:loans",repayments:"gic:repayments",interest:"gic:interest",
-  amendments:"gic:amendments",expenses:"gic:expenses",operationalIncome:"gic:operationalIncome",lockouts:"gic:lockouts",notifications:"gic:notifications",membersBackupLatest:"gic:members:backup:latest"};
+  amendments:"gic:amendments",expenses:"gic:expenses",operationalIncome:"gic:operationalIncome",minutes:"gic:minutes",lockouts:"gic:lockouts",notifications:"gic:notifications",membersBackupLatest:"gic:members:backup:latest"};
 function sanitizeForDb(value){
   if(value===undefined)return null;
   if(value===null)return null;
@@ -809,13 +820,42 @@ function buildSavings(){
   return out;
 }
 
+function seedQuarterlyMinutes(){
+  return[
+    {
+      id:"min-q1-2026",
+      ref:"GIC-MIN-001",
+      title:"Quarter 1 General Meeting Minutes",
+      meetingDate:"2026-01-18",
+      quarter:"Q1 2026",
+      summary:"Highlights:\n1. Reviewed member savings compliance and loan recovery performance.\n2. Confirmed annual fee follow-ups and member accountability actions.\n3. Approved tighter documentation checks for all new loans.",
+      attachments:[],
+      createdBy:"secretary",
+      createdAt:"2026-01-18",
+      updatedAt:"2026-01-18"
+    },
+    {
+      id:"min-q2-2026",
+      ref:"GIC-MIN-002",
+      title:"Quarter 2 General Meeting Minutes",
+      meetingDate:"2026-04-06",
+      quarter:"Q2 2026",
+      summary:"Highlights:\n1. Mid-year savings progress and overdue actions reviewed.\n2. Loan policy reinforcement on guarantor eligibility and signatory records.\n3. Resolution passed to keep minutes digitally available to all members.",
+      attachments:[],
+      createdBy:"secretary",
+      createdAt:"2026-04-06",
+      updatedAt:"2026-04-06"
+    }
+  ];
+}
+
 // ─── 6. STATE ──────────────────────────────────────
 var S={
   loginStep:1,loginUser:null,user:null,
   page:"dashboard",view:"list",selId:null,editId:null,modal:null,
-  users:[],members:[],savings:[],loans:[],repayments:[],interest:[],amendments:[],expenses:[],operationalIncome:[],notifications:[],
+  users:[],members:[],savings:[],loans:[],repayments:[],interest:[],amendments:[],expenses:[],operationalIncome:[],minutes:[],notifications:[],
   lockouts:{},loading:true,toast:null,realtimeListenersActive:false,
-  memberSearch:"",memberStatusFilter:"Active",
+  memberSearch:"",memberStatusFilter:"Active",minutesSearch:"",minutesQuarter:"all",
   finesFilter:"all",
   savTab:"overview",savMemberId:"",loanTab:"all",loanMetricFilter:"all",loanSortBy:"",loanSortDir:"asc",intTab:"overview",expTab:"list",
   usersTab:"admin"
@@ -1244,6 +1284,23 @@ function canUserApproveLoan(loan,user){
 }
 function canManageLoanRecords(user){
   return !!(user&&(user.access==="full"||user.access==="treasurer"));
+}
+function canManageMinutesRecords(){
+  return !!(S.user&&(S.user.access==="full"||S.user.access==="secretary"));
+}
+function minuteQuarterLabel(dateStr){
+  var d=parseLocalDateOnly(dateStr)||new Date((dateStr||todayStr())+"T12:00:00");
+  if(!(d instanceof Date)||isNaN(d.getTime()))return"Quarter";
+  var q=Math.floor(d.getMonth()/3)+1;
+  return"Q"+q+" "+d.getFullYear();
+}
+function nextMinuteRef(){
+  var maxN=0;
+  (S.minutes||[]).forEach(function(m){
+    var mt=String(m.ref||"").match(/GIC-MIN-(\d+)/);
+    if(mt){var n2=parseInt(mt[1],10);if(n2>maxN)maxN=n2;}
+  });
+  return"GIC-MIN-"+String(maxN+1).padStart(3,"0");
 }
 var LOAN_SYSTEM_GO_LIVE_DATE="2026-04-05";
 function isLegacyLoanDate(issued){
@@ -2178,7 +2235,7 @@ function rBottomNav(){
 // ─── 15. MEMBER BOTTOM NAV ─────────────────────────
 function rMemberBottomNav(){
   function bi(id,ic,lb){return'<button class="bn-item'+(S.page===id?" active":"")+'" onclick="goPage(\''+id+'\')"><span class="bn-ic">'+ic+'</span><span>'+lb+'</span></button>';}
-  return bi("my-savings","🪙","Savings")+bi("my-loans","📋","Loans")+bi("my-eligibility","✅","Eligibility")+bi("my-profile","👤","Profile")+
+  return bi("my-savings","🪙","Savings")+bi("my-loans","📋","Loans")+bi("my-minutes","📝","Minutes")+bi("my-eligibility","✅","Eligibility")+bi("my-profile","👤","Profile")+
     '<button class="bn-item" onclick="logout()"><span class="bn-ic">🚪</span><span>Sign Out</span></button>';
 }
 
@@ -2187,7 +2244,7 @@ function rMemberBottomNav(){
 function rPage(){
   var pages={dashboard:rDashboard,members:rMembers,savings:rSavings,loans:rLoans,
     expenses:rExpenses,interest:rInterest,reports:rReports,auditlog:rAuditLog,
-    users:rUsers,"my-savings":rMyAccount};
+    users:rUsers,"my-savings":rMyAccount,"my-loans":rMyAccount,"my-minutes":rMyAccount,"my-eligibility":rMyAccount,"my-profile":rMyAccount};
   return(pages[S.page]||rDashboard)();
 }
 
@@ -2226,6 +2283,14 @@ function rDashboard(){
   var alerts=renderUserAttentionAlerts(S.user);
   var committeeUsers=getLoanCommitteeUsers();
   var myApprovalLoans=S.loans.filter(function(loan){return canUserApproveLoan(loan,S.user);});
+  var latestMinutes=(S.minutes||[]).slice().sort(function(a,b){
+    return String(b.meetingDate||"").localeCompare(String(a.meetingDate||""));
+  }).slice(0,2);
+  var latestMinutesBlock=latestMinutes.length
+    ?'<div class="card" style="margin-bottom:14px"><div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--navy)">📝 Latest Minutes</h3><button class="btn btn-g btn-sm" onclick="S.page=\'members\';S.view=\'minutes\';render()">View All</button></div>'+latestMinutes.map(function(min){
+      return'<div style="padding:8px 0;border-bottom:1px solid var(--gray2)"><div class="fl" style="justify-content:space-between;align-items:flex-start;gap:8px"><div><div style="font-size:12px;font-weight:700;color:var(--navy)">'+esc(min.title||"Meeting Minutes")+'</div><div style="font-size:11px;color:var(--text3)">'+fmtD(min.meetingDate)+' · '+esc(min.quarter||minuteQuarterLabel(min.meetingDate))+'</div><div style="font-size:11px;color:var(--text2);margin-top:4px">'+esc((min.summary||"").slice(0,140))+(min.summary&&min.summary.length>140?'...':'')+'</div></div><div class="fl"><button class="btn btn-g btn-sm" onclick="S.page=\'members\';S.view=\'minutes\';render()">Open</button><button class="btn btn-grn btn-sm" onclick="shareMinuteWhatsApp(\''+min.id+'\')">📱 Share</button></div></div></div>';
+    }).join("")+ '</div>'
+    :'<div class="card" style="margin-bottom:14px"><div class="fl" style="justify-content:space-between"><h3 style="font-size:13px;font-weight:700;color:var(--navy)">📝 Latest Minutes</h3><button class="btn btn-g btn-sm" onclick="S.page=\'members\';S.view=\'minutes\';render()">Open Minutes</button></div><div class="no-data" style="padding:16px 8px">No minutes posted yet.</div></div>';
   if(pA.length)alerts+='<div class="alert alert-warn">✏️ '+pA.length+' savings amendment(s) pending.</div>';
   if(pE.length)alerts+='<div class="alert alert-warn">💸 '+pE.length+' expense(s) pending approval.</div>';
   if(pend.length)alerts+='<div class="alert alert-warn">⚠️ '+pend.length+' loan application(s) pending.</div>';
@@ -2292,7 +2357,7 @@ function rDashboard(){
       '<div class="stat-card"><div class="stat-icon" style="background:#05a55533">💳</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Annual Fees (2026)</div><div style="font-size:14px;font-weight:700;color:var(--green);margin-top:2px">'+fmt(totalAnnualFees)+'</div><div style="font-size:10px;color:var(--text3)">Tracked separately</div></div></div>'+
       '<div class="stat-card"><div class="stat-icon" style="background:#1D4ED833">🏦</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Loan Cash Available</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px">'+fmt(portfolio.availableCash)+'</div><div style="font-size:10px;color:var(--text3)">Savings pool less principal outstanding</div></div></div>'+
       '<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">📅</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">This Month</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px">'+fmt(monthSav)+'</div><div style="font-size:10px;color:var(--text3)">'+MS[n.getMonth()]+" "+n.getFullYear()+'</div></div></div>'+
-    '</div>'+
+    '</div>'+latestMinutesBlock+
     '<div class="grid2" style="margin-bottom:14px">'+
       '<div class="card"><div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--navy)">Loan Committee</h3><span class="bdg bdg-info">'+committeeUsers.length+' approvers · any '+loanApprovalThreshold()+' required</span></div>'+
         '<div style="display:flex;flex-wrap:wrap;gap:8px">'+committeeUsers.map(function(u){return'<div style="background:var(--bg);border-radius:8px;padding:8px 10px;min-width:150px"><div style="font-size:12px;font-weight:700;color:var(--navy)">'+esc(u.name)+'</div><div style="font-size:11px;color:var(--text3)">'+esc(roleLabel(u))+'</div></div>';}).join("")+'</div></div>'+
@@ -2352,6 +2417,7 @@ function rDashboard(){
 function rMembers(){
   if(S.view==="member-detail")return rMemberDetail();
   if(S.view==="add-member"||S.view==="edit-member")return rMemberForm();
+  if(S.view==="minutes")return rMinutesHub(false);
   if(S.view==="exited")return rExitedMembers();
   if(S.view==="annual-fees")return rAnnualFees();
   if(S.view==="fines")return rFines();
@@ -2377,6 +2443,7 @@ function rMemberList(){
   return'<div class="fadein"><div class="page-hdr">'+
     '<div><h1 class="fd page-title">Members</h1><div class="page-sub">'+S.members.filter(function(m){return m.status==="Active";}).length+' active · '+S.members.filter(function(m){return isMemberOffboarded(m);}).length+' exited</div></div>'+
     '<div class="fl flw">'+
+      '<button class="btn btn-g btn-sm" onclick="S.view=\'minutes\';render()">📝 Minutes</button>'+
       '<button class="btn btn-g btn-sm" onclick="S.view=\'annual-fees\';render()">💳 Fees</button>'+
       '<button class="btn btn-g btn-sm" onclick="S.view=\'fines\';render()">⚠️ Fines</button>'+
       '<button class="btn btn-g btn-sm" onclick="S.view=\'exited\';render()">📂 Exited</button>'+
@@ -2391,6 +2458,50 @@ function rMemberList(){
       '</div>'+
       '<div class="mobile-stack"><table class="tbl"><thead><tr><th>No.</th><th>Name</th><th>Phone</th><th>Occupation</th><th>Total Savings</th><th>Status</th>'+(canDeleteMember?'<th></th>':'')+'</tr></thead>'+
       '<tbody>'+(rows||'<tr><td colspan="'+(canDeleteMember?7:6)+'" class="no-data">No members found</td></tr>')+'</tbody></table></div></div></div>';
+}
+
+function rMinutesHub(memberPortalMode){
+  var canManage=canManageMinutesRecords();
+  var allMinutes=(S.minutes||[]).slice().sort(function(a,b){
+    var byDate=String(b.meetingDate||"").localeCompare(String(a.meetingDate||""));
+    if(byDate!==0)return byDate;
+    return String(b.updatedAt||"").localeCompare(String(a.updatedAt||""));
+  });
+  var q=(S.minutesSearch||"").toLowerCase();
+  var qf=S.minutesQuarter||"all";
+  var quarterOpts=["all"].concat(allMinutes.map(function(m){return m.quarter||minuteQuarterLabel(m.meetingDate);}).filter(function(v,i,a){return a.indexOf(v)===i;}));
+  var minutes=allMinutes.filter(function(min){
+    var quarter=min.quarter||minuteQuarterLabel(min.meetingDate);
+    if(qf!=="all"&&quarter!==qf)return false;
+    if(!q)return true;
+    var hay=[min.title,min.summary,min.ref,quarter,min.meetingDate].join(" ").toLowerCase();
+    return hay.indexOf(q)>=0;
+  });
+  var hdr=memberPortalMode
+    ?'<div class="page-hdr"><h1 class="fd page-title">Meeting Minutes</h1><div class="page-sub">Read-only access for all members</div></div>'
+    :'<div class="page-hdr"><div><h1 class="fd page-title">Meeting Minutes</h1><div class="page-sub">Quarterly records and attachments</div></div><div class="fl flw"><button class="btn btn-g btn-sm" onclick="S.view=\'list\';render()">← Back to Members</button>'+(canManage?'<button class="btn btn-p btn-sm" onclick="S.modal={id:\'add-minute\',size:\'modal-xl\'};render()">+ Upload Minutes</button>':'')+'</div></div>';
+  var filters='<div class="card" style="margin-bottom:12px"><div class="fl flw" style="gap:8px"><input class="inp" style="max-width:280px" placeholder="Search title, summary, quarter..." value="'+esc(S.minutesSearch||"")+'" oninput="S.minutesSearch=this.value;render()"><select class="inp" style="max-width:170px" onchange="S.minutesQuarter=this.value;render()">'+quarterOpts.map(function(opt){return'<option value="'+esc(opt)+'"'+(S.minutesQuarter===opt?' selected':'')+'>'+(opt==="all"?'All Quarters':esc(opt))+'</option>';}).join("")+'</select><button class="btn btn-g btn-sm" onclick="S.minutesSearch=\'\';S.minutesQuarter=\'all\';render()">Reset</button><span style="font-size:12px;color:var(--text3)">'+minutes.length+' record(s)</span></div></div>';
+  var rows=minutes.map(function(min){
+    var files=(min.attachments||[]).map(function(att){
+      var at=att||{};
+      var typ=at.type||guessMimeFromName(at.name||"");
+      return'<span class="minute-file-chip">📎 '+esc(at.name||"Attachment")+'</span>'+
+        '<button class="btn btn-g btn-sm" style="font-size:10px;padding:3px 8px" onclick="openAttachmentViewer('+jsq(at.url)+','+jsq(at.name||"Attachment")+','+jsq(typ)+')">View</button>'+
+        '<a class="btn btn-p btn-sm" style="font-size:10px;padding:3px 8px" href="'+esc(at.url||"")+'" target="_blank" rel="noopener">Open</a>';
+    }).join("");
+    var actionBtns='<div class="minute-actions"><button class="btn btn-grn btn-sm" onclick="shareMinuteWhatsApp(\''+min.id+'\')">📱 Share</button>'+(canManage?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'add-minute\',data:\''+min.id+'\',size:\'modal-xl\'};render()">✏️ Edit</button><button class="btn btn-d btn-sm" onclick="deleteMinuteRecord(\''+min.id+'\')">🗑️ Delete</button>':'')+'</div>';
+    return'<article class="minute-card">'+
+      '<div class="minute-top"><div><div class="minute-title">'+esc(min.title||"Meeting Minutes")+'</div><div class="minute-meta">'+esc(min.ref||"Minutes")+' · '+fmtD(min.meetingDate)+' · '+esc(min.quarter||minuteQuarterLabel(min.meetingDate))+'</div></div><span class="bdg bdg-info">'+esc(min.quarter||minuteQuarterLabel(min.meetingDate))+'</span></div>'+
+      '<div class="minute-summary">'+esc(min.summary||"No summary recorded.")+'</div>'+
+      '<div>'+(min.attachments&&min.attachments.length?'<div class="minute-files">'+files+'</div>':'<div class="alert alert-warn" style="margin:0">No file attachment uploaded yet for this minute set.</div>')+'</div>'+
+      '<div class="minute-meta">Recorded by '+esc(min.createdBy||"secretary")+' · Updated '+fmtD(min.updatedAt||min.createdAt||min.meetingDate)+'</div>'+actionBtns+
+    '</article>';
+  }).join("");
+  return'<div class="fadein">'+hdr+
+    '<div class="alert alert-info" style="font-size:12px">All members can read published meeting minutes here. Upload and edits are restricted to Secretary and IT Admin.</div>'+
+    filters+
+    '<div class="minutes-wrap">'+(rows||'<div class="card no-data" style="grid-column:1/-1">No minutes posted yet. '+(canManage?'Use + Upload Minutes to publish the first record.':'Please check back after the Secretary posts minutes.')+'</div>')+'</div>'+
+  '</div>';
 }
 
 function rMemberDetail(){
@@ -3255,7 +3366,7 @@ function rMyAccount(){
 // ─── 27. MEMBER PORTAL ─────────────────────────────
 function goMySavings(){S.page="my-savings";render();}
 function rMemberPortal(){
-  var pages={"my-savings":rMySavings,"my-loans":rMyLoans,"my-eligibility":rMyEligibility,"my-profile":rMyProfile};
+  var pages={"my-savings":rMySavings,"my-loans":rMyLoans,"my-minutes":rMyMinutes,"my-eligibility":rMyEligibility,"my-profile":rMyProfile};
   var m=getMyMember();
   var unpaidFines=m?(m.fines||[]).filter(function(f){return f.status!=="Paid";}):[]; 
   var unpaidAmt=unpaidFines.reduce(function(t,f){return t+f.amount;},0);
@@ -3267,7 +3378,7 @@ function rMemberPortal(){
 }
 function rMemberPortalView(overrideMid){
   // Used by admin viewing their own member account
-  var pages={"my-savings":rMySavings,"my-loans":rMyLoans,"my-eligibility":rMyEligibility,"my-profile":rMyProfile};
+  var pages={"my-savings":rMySavings,"my-loans":rMyLoans,"my-minutes":rMyMinutes,"my-eligibility":rMyEligibility,"my-profile":rMyProfile};
   return(pages[S.page]||rMySavings)();
 }
 
@@ -3438,6 +3549,10 @@ function rMySavings(){
     '<div class="card member-section" style="padding:0">'+
       '<nav class="member-nav-inline">'+rMemberBottomNav()+'</nav>'+
     '</div></div>';
+}
+
+function rMyMinutes(){
+  return rMinutesHub(true);
 }
 
 function rMyLoans(){
@@ -3611,8 +3726,32 @@ function rModalContent(){
     "calc-interest":mCalcInterest,"offboard":mOffboard,"add-user":mAddUser,"edit-user":mEditUser,
     "decline-loan":mDeclineLoan,"edit-loan":mEditLoan,"amend-savings":mAmendSavings,"add-expense":mAddExpense,"add-operational-income":mAddOperationalIncome,
     "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment,
-    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans,"member-data-audit":mMemberDataAudit};
+    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans,"member-data-audit":mMemberDataAudit,"add-minute":mAddMinute};
   return(map[m.id]||function(){return"";})();
+}
+
+function mAddMinute(){
+  var mid=S.modal&&S.modal.data;
+  var rec=mid?(S.minutes||[]).filter(function(x){return x.id===mid;})[0]:null;
+  var atts=rec&&rec.attachments?rec.attachments:[];
+  var attRows=atts.map(function(att){
+    return'<div class="fl" style="justify-content:space-between;align-items:center;border:1px solid var(--gray2);border-radius:8px;padding:8px 10px;margin-bottom:6px"><div style="font-size:12px;color:var(--text2);max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📎 '+esc(att.name||"Attachment")+'</div><div class="fl"><button class="btn btn-g btn-sm" onclick="openAttachmentViewer('+jsq(att.url)+','+jsq(att.name||"Attachment")+','+jsq(att.type||guessMimeFromName(att.name||""))+')">View</button><button class="btn btn-d btn-sm" onclick="removeMinuteAttachment(\''+mid+'\',\''+att.id+'\')">Remove</button></div></div>';
+  }).join("");
+  var mDate=(rec&&rec.meetingDate)||todayStr();
+  var qLabel=(rec&&rec.quarter)||minuteQuarterLabel(mDate);
+  return mhdr((rec?"Edit":"Upload")+" Meeting Minutes")+
+    '<div class="mbody">'+
+      '<div class="alert alert-info" style="font-size:12px">Upload minutes in any format (PDF, image, DOCX, text, spreadsheet). Published minutes are visible to all members, including mobile users.</div>'+
+      '<div class="fg">'+
+        '<div class="full"><label class="form-label">* Minutes Title</label><input class="inp" id="min-title" value="'+esc((rec&&rec.title)||"")+'" placeholder="e.g. Quarter 2 General Meeting Minutes"></div>'+
+        '<div><label class="form-label">* Meeting Date</label><input class="inp" type="date" id="min-date" value="'+mDate+'" onchange="var q=document.getElementById(\'min-quarter\');if(q)q.value=minuteQuarterLabel(this.value)"></div>'+
+        '<div><label class="form-label">Quarter</label><input class="inp" id="min-quarter" value="'+esc(qLabel)+'" readonly></div>'+
+        '<div class="full"><label class="form-label">Summary / Key Resolutions</label><textarea class="inp" id="min-summary" rows="5" placeholder="Write a concise summary of key decisions, actions, and attendees...">'+esc((rec&&rec.summary)||"")+'</textarea></div>'+
+        '<div class="full"><label class="form-label">Attach Minute Files (optional)</label><input class="inp" type="file" id="min-files" multiple accept=".pdf,image/*,.doc,.docx,.txt,.rtf,.xls,.xlsx,.ppt,.pptx"></div>'+
+      '</div>'+
+      (attRows?'<div style="margin-top:10px"><div class="sec-hdr" style="margin-top:0">Existing Attachments</div>'+attRows+'</div>':'')+
+    '</div>'+
+    mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveMinuteRecord()">'+(rec?'💾 Save Changes':'📤 Publish Minutes')+'</button>');
 }
 
 function mSelfPasswordReset(){
@@ -4706,6 +4845,26 @@ function sendMemberStatementWA(mid){
   window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
   showToast("Statement sent to "+m.fullName+" via WhatsApp");
 }
+
+function shareMinuteWhatsApp(mid){
+  var min=(S.minutes||[]).filter(function(x){return x.id===mid;})[0];
+  if(!min){showToast("Minutes record not found","err");return;}
+  var msg="📝 *GAZEBO Investment Club*\n*Meeting Minutes*\n";
+  msg+="━━━━━━━━━━━━━━━━━━━━\n";
+  msg+="*Title:* "+(min.title||"Meeting Minutes")+"\n";
+  msg+="*Date:* "+fmtD(min.meetingDate)+"\n";
+  msg+="*Quarter:* "+(min.quarter||minuteQuarterLabel(min.meetingDate))+"\n\n";
+  if(min.summary)msg+="*Summary:*\n"+min.summary+"\n\n";
+  if(min.attachments&&min.attachments.length){
+    msg+="*Attachments:*\n";
+    min.attachments.forEach(function(a){if(a&&a.url)msg+="- "+(a.name||"Attachment")+": "+a.url+"\n";});
+    msg+="\n";
+  }
+  msg+="GAZEBO Investment Club";
+  logEvent("CONFIG",S.user&&S.user.name||"System","Minutes shared on WhatsApp: "+(min.ref||min.id));
+  window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
+  showToast("Minutes share opened on WhatsApp","ok");
+}
 function openDefaulterNotice(mid){S.modal={id:"defaulter-notice",data:mid};render();}
 function triggerUpload(id){var el=document.getElementById(id);if(el)el.click();}
 async function handlePhoto(input,prevId,hidId){
@@ -5249,6 +5408,72 @@ function approveAmendment(aid){
 function rejectAmendment(aid){
   S.amendments=S.amendments.map(function(x){return x.id===aid?Object.assign({},x,{status:"Rejected",approvedBy:S.user.name,approvedAt:todayStr()}):x;});
   DB.set(K.amendments,S.amendments);logEvent("AMENDMENT",S.user.name,"Amendment rejected: "+aid);showToast("Amendment rejected","warn");render();
+}
+
+async function saveMinuteRecord(){
+  if(!canManageMinutesRecords()){showToast("Only Secretary or IT Admin can manage minutes","err");return;}
+  var mid=S.modal&&S.modal.data;
+  var title=(v("min-title")||"").trim();
+  var meetingDate=v("min-date")||todayStr();
+  var quarter=v("min-quarter")||minuteQuarterLabel(meetingDate);
+  var summary=(v("min-summary")||"").trim();
+  if(!title){showToast("Enter minutes title","err");return;}
+  var fileEl=document.getElementById("min-files");
+  var files=(fileEl&&fileEl.files)?Array.prototype.slice.call(fileEl.files):[];
+  var uploaded=[];
+  try{
+    for(var i=0;i<files.length;i++){
+      var f=files[i];
+      if(f.size>20*1024*1024){showToast("File too large: "+f.name+" (max 20MB)","err");return;}
+      var up=await uploadAttachmentToStorage(f,"minutes/files");
+      uploaded.push({id:gid(),name:up.name,url:normalizeCloudinaryAssetUrl(up.url,up.type||f.type||f.name),type:up.type||f.type||guessMimeFromName(f.name),size:f.size,uploadedAt:todayStr(),uploadedBy:S.user.name});
+    }
+    if(mid){
+      S.minutes=(S.minutes||[]).map(function(m){
+        if(m.id!==mid)return m;
+        return Object.assign({},m,{title:title,meetingDate:meetingDate,quarter:quarter,summary:summary,attachments:(m.attachments||[]).concat(uploaded),updatedAt:todayStr(),updatedBy:S.user.name});
+      });
+      logEvent("CONFIG",S.user.name,"Minutes updated: "+title);
+    }else{
+      S.minutes=(S.minutes||[]).concat([{
+        id:gid(),ref:nextMinuteRef(),title:title,meetingDate:meetingDate,quarter:quarter,summary:summary,
+        attachments:uploaded,createdBy:S.user.name,createdAt:todayStr(),updatedAt:todayStr(),updatedBy:S.user.name
+      }]);
+      logEvent("CONFIG",S.user.name,"Minutes published: "+title);
+    }
+    await DB.set(K.minutes,S.minutes);
+    closeModal();
+    showToast(mid?"Minutes updated":"Minutes published","ok");
+    render();
+  }catch(err){
+    console.error("Minutes upload failed:",err);
+    showToast(storageErrorHint(err),"err");
+  }
+}
+
+async function removeMinuteAttachment(mid,aid){
+  if(!canManageMinutesRecords()){showToast("Not authorised","err");return;}
+  var rec=(S.minutes||[]).filter(function(m){return m.id===mid;})[0];
+  if(!rec)return;
+  S.minutes=(S.minutes||[]).map(function(m){
+    if(m.id!==mid)return m;
+    return Object.assign({},m,{attachments:(m.attachments||[]).filter(function(a){return a.id!==aid;}),updatedAt:todayStr(),updatedBy:S.user.name});
+  });
+  await DB.set(K.minutes,S.minutes);
+  showToast("Attachment removed","ok");
+  render();
+}
+
+async function deleteMinuteRecord(mid){
+  if(!canManageMinutesRecords()){showToast("Only Secretary or IT Admin can delete minutes","err");return;}
+  var rec=(S.minutes||[]).filter(function(m){return m.id===mid;})[0];
+  if(!rec){showToast("Minutes record not found","err");return;}
+  if(!confirm("Delete minutes record \""+rec.title+"\"?"))return;
+  S.minutes=(S.minutes||[]).filter(function(m){return m.id!==mid;});
+  await DB.set(K.minutes,S.minutes);
+  logEvent("CONFIG",S.user.name,"Minutes deleted: "+rec.title);
+  showToast("Minutes deleted","warn");
+  render();
 }
 
 function saveExpense(){
@@ -5901,6 +6126,12 @@ function setupRealtimeListeners(){
       render();
     }
   });
+  db.collection('data').doc(K.minutes).onSnapshot((doc) => {
+    if (doc.exists && S.user) {
+      S.minutes = doc.data().value||[];
+      render();
+    }
+  });
   db.collection('data').doc(K.lockouts).onSnapshot((doc) => {
     if (doc.exists && S.user) {
       S.lockouts = doc.data().value||{};
@@ -5936,10 +6167,10 @@ async function init(){
   if(!seeded){
     var sv=buildSavings();
     await DB.set(K.users,SEED_USERS);await DB.set(K.members,SEED_MEMBERS);await DB.set(K.savings,sv);
-    await DB.set(K.loans,[]);await DB.set(K.repayments,[]);await DB.set(K.interest,[]);await DB.set(K.amendments,[]);await DB.set(K.expenses,[]);await DB.set(K.operationalIncome,[]);
+    await DB.set(K.loans,[]);await DB.set(K.repayments,[]);await DB.set(K.interest,[]);await DB.set(K.amendments,[]);await DB.set(K.expenses,[]);await DB.set(K.operationalIncome,[]);await DB.set(K.minutes,seedQuarterlyMinutes());
     await DB.set(K.lockouts,{});await DB.set(K.notifications,[]);
     await DB.set(K.seeded,true);
-    S.users=SEED_USERS;S.members=SEED_MEMBERS;S.savings=sv;S.loans=[];S.repayments=[];S.interest=[];S.amendments=[];S.expenses=[];S.operationalIncome=[];S.lockouts={};S.notifications=[];
+    S.users=SEED_USERS;S.members=SEED_MEMBERS;S.savings=sv;S.loans=[];S.repayments=[];S.interest=[];S.amendments=[];S.expenses=[];S.operationalIncome=[];S.minutes=seedQuarterlyMinutes();S.lockouts={};S.notifications=[];
   } else {
     // Load stored data and merge with seed users so seeded role/access updates and new
     // committee accounts land safely without wiping custom passwords, PIN changes, or TOTP.
@@ -5970,6 +6201,11 @@ async function init(){
     S.savings=await DB.get(K.savings)||[];S.loans=await DB.get(K.loans)||[];
     S.repayments=await DB.get(K.repayments)||[];S.interest=await DB.get(K.interest)||[];
     S.amendments=await DB.get(K.amendments)||[];S.expenses=await DB.get(K.expenses)||[];S.operationalIncome=await DB.get(K.operationalIncome)||[];
+    S.minutes=await DB.get(K.minutes)||[];
+    if(!S.minutes.length){
+      S.minutes=seedQuarterlyMinutes();
+      await DB.set(K.minutes,S.minutes);
+    }
     S.lockouts=await DB.get(K.lockouts)||{};S.notifications=await DB.get(K.notifications)||[];
   }
   try{

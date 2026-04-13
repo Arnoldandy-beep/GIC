@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAZEBO Investment Club — Treasurer's Operational Manual</title>
+<style>
+  :root {
+    --navy:#1A2B4A; --gold:#C9A84C; --gold2:#A07830;
+    --green:#057A55; --red:#C0392B; --blue:#2563EB;
+    --bg:#F8F9FA; --white:#FFFFFF; --gray1:#F1F3F5;
+    --gray2:#DEE2E6; --text1:#111827; --text2:#374151; --text3:#6B7280;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",Arial,sans-serif;font-size:14px;color:var(--text1);background:var(--bg);line-height:1.55}
+  .cover{background:var(--navy);color:#fff;padding:48px 36px 40px;text-align:center;border-bottom:6px solid var(--gold)}
+  .cover h1{font-size:28px;font-weight:800;letter-spacing:0.5px;margin-bottom:6px}
+  .cover h2{font-size:16px;font-weight:400;color:var(--gold);margin-bottom:18px}
+  .cover .sub{font-size:12px;opacity:0.65;margin-top:8px}
+  .badge{display:inline-block;background:var(--gold);color:var(--navy);border-radius:20px;padding:3px 14px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
+  .main{max-width:900px;margin:0 auto;padding:24px 20px 60px}
+  /* TOC */
+  .toc{background:var(--white);border:1px solid var(--gray2);border-radius:10px;padding:20px 24px;margin-bottom:30px}
+  .toc h3{font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text3);margin-bottom:12px;font-weight:700}
+  .toc ol{padding-left:18px}
+  .toc li{margin-bottom:5px}
+  .toc a{color:var(--navy);text-decoration:none;font-weight:500;font-size:13px}
+  .toc a:hover{color:var(--gold2);text-decoration:underline}
+  /* Sections */
+  .section{background:var(--white);border-radius:10px;border:1px solid var(--gray2);margin-bottom:22px;overflow:hidden}
+  .section-hdr{background:var(--navy);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:10px}
+  .section-hdr .icon{font-size:20px;flex-shrink:0}
+  .section-hdr h2{font-size:15px;font-weight:700;letter-spacing:0.3px}
+  .section-body{padding:18px 20px}
+  /* Steps */
+  .steps{list-style:none;padding:0}
+  .steps li{display:flex;gap:12px;margin-bottom:14px;align-items:flex-start}
+  .steps li:last-child{margin-bottom:0}
+  .step-num{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--navy);color:var(--gold);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .step-text{flex:1;font-size:13.5px;color:var(--text2)}
+  .step-text strong{color:var(--text1)}
+  /* Navigation pills */
+  .nav-pill{display:inline-block;background:var(--gray1);border:1px solid var(--gray2);border-radius:6px;padding:2px 9px;font-size:11.5px;font-weight:700;color:var(--navy);white-space:nowrap}
+  .nav-pill.gold{background:#FBF3E0;border-color:var(--gold);color:var(--gold2)}
+  .nav-pill.green{background:#ECFDF5;border-color:var(--green);color:var(--green)}
+  .nav-pill.red{background:#FEF2F2;border-color:var(--red);color:var(--red)}
+  /* Call-out boxes */
+  .callout{border-radius:7px;padding:10px 14px;font-size:12.5px;margin:12px 0;display:flex;gap:9px;align-items:flex-start}
+  .callout.info{background:#EFF6FF;border-left:4px solid var(--blue);color:#1e40af}
+  .callout.warn{background:#FFFBEB;border-left:4px solid #D97706;color:#92400e}
+  .callout.ok{background:#ECFDF5;border-left:4px solid var(--green);color:var(--green)}
+  .callout.danger{background:#FEF2F2;border-left:4px solid var(--red);color:var(--red)}
+  .callout-icon{font-size:16px;margin-top:1px;flex-shrink:0}
+  /* Quick ref table */
+  .qr-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  .qr-table th{background:var(--navy);color:#fff;padding:7px 10px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.4px}
+  .qr-table td{padding:7px 10px;border-bottom:1px solid var(--gray2);vertical-align:top}
+  .qr-table tr:last-child td{border-bottom:none}
+  .qr-table tr:nth-child(even) td{background:var(--gray1)}
+  .divider{border:none;border-top:1px solid var(--gray2);margin:14px 0}
+  .subsection-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin:18px 0 8px}
+  /* Perms grid */
+  .perm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:10px}
+  .perm-item{background:var(--gray1);border:1px solid var(--gray2);border-radius:7px;padding:8px 12px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:7px}
+  .perm-item::before{content:"✅";flex-shrink:0}
+  /* Print */
+  @media print {
+    body{background:#fff}
+    .cover{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .section-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .step-num{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .qr-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .main{padding:16px 12px}
+    .section{page-break-inside:avoid}
+    a{text-decoration:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div style="font-size:32px;margin-bottom:8px">🏦</div>
+  <h1>GAZEBO Investment Club</h1>
+  <h2>Treasurer's Operational Manual</h2>
+  <div class="badge">Treasurer Access Level</div>
+  <div class="sub">GAZEBO GIC System · For internal use only · April 2026</div>
+</div>
+
+<div class="main">
+
+  <!-- ─── INTRO ─── -->
+  <div class="callout info" style="margin-bottom:22px">
+    <span class="callout-icon">ℹ️</span>
+    <div>This manual covers every action the Treasurer is authorised to perform in the GIC system.
+    Open the app, log in with your <strong>Treasurer account</strong>, then follow the steps below.
+    All financial entries are saved to the cloud and cannot be silently undone.</div>
+  </div>
+
+  <!-- ─── TOC ─── -->
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#perms">What the Treasurer can do (permissions overview)</a></li>
+      <li><a href="#savings">Recording a savings deposit</a></li>
+      <li><a href="#amend">Correcting or voiding a savings entry</a></li>
+      <li><a href="#delete-sav">Deleting a savings entry</a></li>
+      <li><a href="#new-loan">Creating a new loan</a></li>
+      <li><a href="#approve-loan">Approving a loan</a></li>
+      <li><a href="#repayment">Recording a loan repayment (principal + interest)</a></li>
+      <li><a href="#close-loan">How a loan closes automatically</a></li>
+      <li><a href="#fines">Issuing and editing member fines</a></li>
+      <li><a href="#expense">Recording a club expense</a></li>
+      <li><a href="#annual-fee">Managing annual fees</a></li>
+      <li><a href="#whatsapp">Sending a member statement via WhatsApp</a></li>
+      <li><a href="#interest">Year-end interest distribution</a></li>
+      <li><a href="#audit">Running the Member Data Audit</a></li>
+      <li><a href="#offboard">Offboarding a member</a></li>
+      <li><a href="#tips">Quick-reference rates &amp; tips</a></li>
+    </ol>
+  </div>
+
+  <!-- ─── 1. PERMISSIONS ─── -->
+  <div class="section" id="perms">
+    <div class="section-hdr"><span class="icon">🔑</span><h2>1 · What the Treasurer Can Do</h2></div>
+    <div class="section-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
+        The Treasurer account holds the broadest operational permissions in the club, second only to IT Admin.
+      </p>
+      <div class="perm-grid">
+        <div class="perm-item">Record savings deposits</div>
+        <div class="perm-item">Amend savings (maker-checker)</div>
+        <div class="perm-item">Delete savings entries directly</div>
+        <div class="perm-item">Submit new loan applications</div>
+        <div class="perm-item">Edit pending &amp; legacy loans</div>
+        <div class="perm-item">Approve / decline loans</div>
+        <div class="perm-item">Record loan repayments</div>
+        <div class="perm-item">Upload scanned loan forms</div>
+        <div class="perm-item">Issue &amp; edit member fines</div>
+        <div class="perm-item">Record club expenses</div>
+        <div class="perm-item">Record operational income</div>
+        <div class="perm-item">Manage annual fees</div>
+        <div class="perm-item">Send WhatsApp statements</div>
+        <div class="perm-item">Year-end interest distribution</div>
+        <div class="perm-item">Member Data Audit (Reports)</div>
+        <div class="perm-item">Offboard members</div>
+        <div class="perm-item">View loan diagnostics</div>
+        <div class="perm-item">Manage member records</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 2. SAVINGS ─── -->
+  <div class="section" id="savings">
+    <div class="section-hdr"><span class="icon">💰</span><h2>2 · Recording a Savings Deposit</h2></div>
+    <div class="section-body">
+      <div class="callout info">
+        <span class="callout-icon">ℹ️</span>
+        <div>The standard monthly contribution is <strong>UGX 100,000</strong>. Partial or double payments are allowed — use the Notes field to flag them.</div>
+      </div>
+      <ul class="steps" style="margin-top:12px">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Savings</span> in the top navigation bar.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click the <span class="nav-pill gold">+ Add Savings</span> button (top-right of the page).</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Select the <strong>Member</strong> from the dropdown.</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Enter the <strong>Amount</strong> (defaults to 100,000).</div></li>
+        <li><div class="step-num">5</div><div class="step-text">Set the <strong>Date Deposited</strong> (defaults to today). Always use the actual receipt date.</div></li>
+        <li><div class="step-num">6</div><div class="step-text">Fill in <strong>Notes</strong> — e.g. "Monthly contribution", "Partial payment", "Double contribution".</div></li>
+        <li><div class="step-num">7</div><div class="step-text">Click <span class="nav-pill green">💾 Record &amp; Return</span>. The entry saves immediately.</div></li>
+      </ul>
+      <div class="callout warn" style="margin-top:12px">
+        <span class="callout-icon">⚠️</span>
+        <div>A savings entry posted by a non-treasurer user goes into a <em>Pending</em> queue and requires your approval. As Treasurer you can approve or reject those from the Savings page.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 3. AMEND SAVINGS ─── -->
+  <div class="section" id="amend">
+    <div class="section-hdr"><span class="icon">✏️</span><h2>3 · Correcting or Voiding a Savings Entry (Amendment)</h2></div>
+    <div class="section-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        Use this when you need to fix a wrong amount or date, or mark a duplicate entry as void.
+        Amendments are <strong>maker-checker</strong>: if you are the maker, a second admin (IT Admin) must approve.
+        If the IT Admin is the maker, you (Treasurer) can be the approver.
+      </p>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Savings</span> and find the entry to correct.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click the <span class="nav-pill">✏️ Amend</span> action button on that row.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Choose <strong>Correct Amount</strong> (enter the right figure and date) <em>or</em> <strong>Void Entry</strong> (marks it cancelled).</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Enter a clear <strong>Reason</strong> — this is audited.</div></li>
+        <li><div class="step-num">5</div><div class="step-text">Click <span class="nav-pill gold">Submit for Approval →</span>. The request is sent to IT Admin for confirmation.</div></li>
+      </ul>
+      <div class="callout ok">
+        <span class="callout-icon">✅</span>
+        <div>The original entry stays unchanged until the approver confirms. An approved amendment updates the savings tally and timeline automatically.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 4. DELETE SAVINGS ─── -->
+  <div class="section" id="delete-sav">
+    <div class="section-hdr"><span class="icon">🗑️</span><h2>4 · Deleting a Savings Entry</h2></div>
+    <div class="section-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        Treasurers (and IT Admin) can delete savings records directly.
+        Other users only raise a deletion request that requires approval.
+      </p>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Savings</span>, find the entry.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click the <span class="nav-pill red">🗑️ Delete</span> button on that row.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Confirm the warning prompt. The record is removed immediately.</div></li>
+      </ul>
+      <div class="callout danger">
+        <span class="callout-icon">🚨</span>
+        <div><strong>Irreversible.</strong> Prefer the <em>Void</em> amendment path above unless the entry is a clear error that must not appear in history at all.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 5. NEW LOAN ─── -->
+  <div class="section" id="new-loan">
+    <div class="section-hdr"><span class="icon">📋</span><h2>5 · Creating a New Loan</h2></div>
+    <div class="section-body">
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div><strong>Paper first, system second.</strong> Only open a loan in the system once you have verified a signed paper loan application form. The loan stays in <em>Pending</em> status until 3 of the 4 committee approvers confirm.</div>
+      </div>
+      <div class="subsection-title">For a Club Member</div>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Loans</span> → click <span class="nav-pill gold">+ New Loan</span>.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Leave the type as <strong>🏅 Club Member (5%/mo)</strong>.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Select the <strong>Borrower</strong> from the dropdown — it shows each member's available savings next to their name.</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Enter <strong>Amount</strong>, confirm <strong>Period</strong> (1–6 months) and <strong>Date Issued</strong>.</div></li>
+        <li><div class="step-num">5</div><div class="step-text">The live calculator shows: <em>Monthly Instalment</em>, <em>Total Interest</em> and <em>Total Repayable</em>. Confirm these match the paper form.</div></li>
+        <li><div class="step-num">6</div><div class="step-text">Fill <strong>Purpose</strong>.</div></li>
+        <li><div class="step-num">7</div><div class="step-text">Select <strong>Guarantor 1</strong> and <strong>Guarantor 2</strong>. The system checks their available savings covers the total repayable — a warning appears if they fall short.</div></li>
+        <li><div class="step-num">8</div><div class="step-text">Click <span class="nav-pill green">Submit Loan</span>. Status becomes <em>Pending</em>.</div></li>
+      </ul>
+      <div class="subsection-title">For a Non-Member</div>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Select <strong>👤 Non-Member (10%/mo)</strong>. The borrower dropdown hides and a free-text <em>Borrower Full Name</em> field appears.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Fill in <strong>Collateral description</strong> and <strong>Estimated Value</strong>.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Still requires two club-member guarantors. Continue from step 7 above.</div></li>
+      </ul>
+      <div class="subsection-title">Recording a Legacy / Historical Loan</div>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Set the <strong>Date Issued</strong> to the actual historical date (before 5 Apr 2026). The form automatically enables <em>Legacy Capture Mode</em>.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Fill in <strong>Date Approved</strong>, <strong>Date Disbursed</strong>, <strong>Date Paid Off</strong> (if already cleared), <strong>Historical Status</strong>, and <strong>Approvers on Record</strong> (comma-separated names).</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Submit. Legacy loans can be corrected later via <em>Edit Legacy Loan</em>.</div></li>
+      </ul>
+      <div class="callout info" style="margin-top:4px">
+        <span class="callout-icon">ℹ️</span>
+        <div>After submitting, open the loan detail, scroll to <strong>Documentation</strong> and click <span class="nav-pill">📎 Upload scanned loan form</span> to attach the signed paper form image or PDF.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 6. APPROVE LOAN ─── -->
+  <div class="section" id="approve-loan">
+    <div class="section-hdr"><span class="icon">✅</span><h2>6 · Approving a Loan</h2></div>
+    <div class="section-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        Loans require <strong>3 out of 4</strong> approvals from: IT Admin, Chairman, Treasurer, Secretary.
+        Any eligible member can approve from the loan detail view.
+      </p>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Loans</span> → click the <strong>Pending</strong> tab.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click the loan row to open its detail.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Click <span class="nav-pill green">✅ Approve</span>. Once 3 approvals are collected, the loan status changes to <em>Active</em> automatically.</div></li>
+        <li><div class="step-num">4</div><div class="step-text">To reject, click <span class="nav-pill red">❌ Decline</span> and enter a reason.</div></li>
+      </ul>
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div>Record the two manual signatories in the <strong>Signatory 1 / Signatory 2</strong> fields on the loan detail for audit trail purposes.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 7. REPAYMENT ─── -->
+  <div class="section" id="repayment">
+    <div class="section-hdr"><span class="icon">💳</span><h2>7 · Recording a Loan Repayment</h2></div>
+    <div class="section-body">
+      <div class="callout info">
+        <span class="callout-icon">ℹ️</span>
+        <div>Every installment settles <strong>outstanding interest first, then principal</strong> (standard posting rule). The system does this automatically based on the Payment Type you select.</div>
+      </div>
+      <ul class="steps" style="margin-top:12px">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Loans</span> → click the <strong>Active</strong> tab.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click the loan row to open it, then click <span class="nav-pill gold">+ Payment</span> (top-right of the detail view).</div></li>
+        <li><div class="step-num">3</div><div class="step-text">The modal shows outstanding balances — <em>Total Outstanding</em>, <em>Interest Outstanding</em>, <em>Principal Outstanding</em>, and the <em>Standard Instalment</em> amount.</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Choose <strong>Payment Type</strong>:
+          <ul style="margin:6px 0 0 16px;font-size:13px;color:var(--text2)">
+            <li style="margin-bottom:4px"><strong>Installment</strong> — normal monthly payment; interest cleared first, then principal.</li>
+            <li><strong>Interest Only</strong> — member is paying interest portion alone this month (does not reduce principal).</li>
+          </ul>
+        </div></li>
+        <li><div class="step-num">5</div><div class="step-text">Enter the <strong>Amount</strong> received (defaults to the smaller of standard instalment or outstanding balance).</div></li>
+        <li><div class="step-num">6</div><div class="step-text">Set the <strong>Payment Date</strong> and add <strong>Notes</strong> (e.g. "Mobile Money 0703-XXXXXX", "Cash").</div></li>
+        <li><div class="step-num">7</div><div class="step-text">Click <span class="nav-pill green">💾 Record</span>.</div></li>
+      </ul>
+      <div class="callout warn" style="margin-top:12px">
+        <span class="callout-icon">⚠️</span>
+        <div>If the loan is overdue, the modal will display the extra <strong>penalty interest</strong> already added. Collect and record that too before closing the loan.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 8. CLOSE LOAN ─── -->
+  <div class="section" id="close-loan">
+    <div class="section-hdr"><span class="icon">🔒</span><h2>8 · Closing a Loan (Auto-Close)</h2></div>
+    <div class="section-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        <strong>There is no manual "close loan" button.</strong> The system marks a loan <em>Cleared</em> automatically the moment its outstanding balance reaches zero.
+      </p>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Record repayments as described in Step 7 above, one installment at a time (or a lump-sum if the borrower wants to pay off everything).</div></li>
+        <li><div class="step-num">2</div><div class="step-text">On the last repayment, enter the exact remaining outstanding amount. The system will detect the balance hits zero and flip the loan to <span class="nav-pill green">Cleared</span>.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">After closure, the guarantors' locked savings are released automatically.</div></li>
+        <li><div class="step-num">4</div><div class="step-text">If required, remove the uploaded loan form document by clicking <span class="nav-pill red">🗑️ Remove uploaded form</span> (only visible on Cleared loans).</div></li>
+      </ul>
+      <div class="callout ok">
+        <span class="callout-icon">✅</span>
+        <div>Check: the repayment progress ring in the loan detail should show <strong>100%</strong> and the status badge should read <strong>Cleared</strong>.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 9. FINES ─── -->
+  <div class="section" id="fines">
+    <div class="section-hdr"><span class="icon">⚠️</span><h2>9 · Issuing and Editing Member Fines</h2></div>
+    <div class="section-body">
+      <div class="subsection-title">Issue a fine</div>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Members</span> → <strong>Fines</strong> tab  <em>or</em>  click <span class="nav-pill gold">⚠️ Issue Fine</span> from the Members page.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Select the <strong>Member</strong> and the <strong>Violation</strong> from the list. Choose <em>Other (specify)</em> to type a custom offence.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Add a <strong>Narrative</strong> (e.g. "Meeting of 5 Apr 2026 — arrived 45 min late, no prior notice").</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Set the <strong>Date of Offence</strong> and confirm the <strong>Amount</strong> (default UGX 20,000).</div></li>
+        <li><div class="step-num">5</div><div class="step-text">Click <span class="nav-pill red">⚠️ Issue Fine</span>. The fine is recorded as <em>Unpaid</em>.</div></li>
+      </ul>
+      <div class="subsection-title">Mark a fine as paid / edit it</div>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Find the fine in the member's record or the Fines tab.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click <span class="nav-pill">✏️ Edit</span>, change the <strong>Status</strong> to <em>Paid</em>, adjust amount/date if needed, click <span class="nav-pill green">💾 Save Changes</span>.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── 10. EXPENSE ─── -->
+  <div class="section" id="expense">
+    <div class="section-hdr"><span class="icon">📤</span><h2>10 · Recording a Club Expense</h2></div>
+    <div class="section-body">
+      <div class="callout info">
+        <span class="callout-icon">ℹ️</span>
+        <div>Expenses draw from <em>operational funds</em> (annual fees + other income), never from the savings pool or loan interest. The available operational balance is shown in the form.</div>
+      </div>
+      <ul class="steps" style="margin-top:12px">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Expenses</span> → click <span class="nav-pill gold">+ Record Expense</span>.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Enter <strong>Amount</strong>, <strong>Date</strong>, <strong>Purpose / Description</strong>, and <strong>Category</strong>.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Select the <strong>Approver</strong> — choose Chairman, Secretary, or IT Admin (never yourself).</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Add any <strong>Supporting Notes</strong> (receipt number, context).</div></li>
+        <li><div class="step-num">5</div><div class="step-text">Click <span class="nav-pill green">Submit for Approval</span>. The selected approver sees it in their Expenses view and can confirm or reject.</div></li>
+      </ul>
+      <p style="margin-top:12px;font-size:13px;color:var(--text2)">
+        To log other income (donations, penalties received as cash), click <span class="nav-pill gold">+ Record Operational Income</span> on the same page and fill in the source and amount.
+      </p>
+    </div>
+  </div>
+
+  <!-- ─── 11. ANNUAL FEES ─── -->
+  <div class="section" id="annual-fee">
+    <div class="section-hdr"><span class="icon">📅</span><h2>11 · Managing Annual Fees</h2></div>
+    <div class="section-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        Every member owes <strong>UGX 50,000</strong> per year for club operations.
+        Fees are tracked separately from savings — they do not affect savings or loan calculations.
+      </p>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Members</span> → open a member's profile → click the <strong>Annual Fees</strong> tab.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click <span class="nav-pill">✏️ Edit</span> next to the relevant year.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Update the <strong>Amount</strong>, <strong>Date</strong>, and change <strong>Status</strong> to <em>Paid</em>.</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Click <span class="nav-pill green">💾 Save Changes</span>.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── 12. WHATSAPP ─── -->
+  <div class="section" id="whatsapp">
+    <div class="section-hdr"><span class="icon">📱</span><h2>12 · Sending a Member Statement via WhatsApp</h2></div>
+    <div class="section-body">
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Members</span> and find the member.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click <span class="nav-pill green">📱 Statement → WhatsApp</span>. This button is only visible to Treasurer and IT Admin when the member has a phone number on file.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">WhatsApp opens (web or app) with a pre-filled message listing the member's savings total, outstanding loans, and any fines. Review and send.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── 13. INTEREST DIST ─── -->
+  <div class="section" id="interest">
+    <div class="section-hdr"><span class="icon">📊</span><h2>13 · Year-End Interest Distribution</h2></div>
+    <div class="section-body">
+      <div class="callout danger">
+        <span class="callout-icon">🚨</span>
+        <div><strong>Run once per year on 31 December only.</strong> This action distributes the annual interest pool proportionally to members' savings balances. It cannot be rolled back easily.</div>
+      </div>
+      <ul class="steps" style="margin-top:12px">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Reports</span> → click <span class="nav-pill gold">📊 Interest Distribution</span>.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Review the preview table: <em>Interest Pool</em>, <em>Effective Rate</em>, and each member's share. Cross-check total against bank records.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">If figures look correct, click <span class="nav-pill green">✅ Process</span>. The interest is posted as savings credits for every eligible member.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── 14. AUDIT ─── -->
+  <div class="section" id="audit">
+    <div class="section-hdr"><span class="icon">🧮</span><h2>14 · Running the Member Data Audit</h2></div>
+    <div class="section-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        The audit report gives a quick data integrity check — savings totals, locked savings, outstanding loans, and any orphan records.
+      </p>
+      <ul class="steps">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Reports</span> → click <span class="nav-pill gold">🧮 Member Data Audit</span>.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">The header row shows: total members, combined savings + locked, active loan exposure + overdue count.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Any <strong>red alert banners</strong> at the top flag orphan data (savings or loans with no matching member).</div></li>
+        <li><div class="step-num">4</div><div class="step-text">The per-member table lists savings, locked amount, available savings, active borrowing, guarantees, and outstanding balance. A <span class="nav-pill red">⚠ Issue</span> badge highlights anomalies.</div></li>
+        <li><div class="step-num">5</div><div class="step-text">Investigate flagged rows and reconcile via the relevant savings or loan records. Contact IT Admin for database-level fixes.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── 15. OFFBOARD ─── -->
+  <div class="section" id="offboard">
+    <div class="section-hdr"><span class="icon">🚪</span><h2>15 · Offboarding a Member</h2></div>
+    <div class="section-body">
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div>Only offboard a member after all their active loans are fully cleared and the committee has approved the withdrawal. An exit fee of <strong>5%</strong> of total savings is deducted.</div>
+      </div>
+      <ul class="steps" style="margin-top:12px">
+        <li><div class="step-num">1</div><div class="step-text">Go to <span class="nav-pill">Members</span> → open the member's profile.</div></li>
+        <li><div class="step-num">2</div><div class="step-text">Click <span class="nav-pill red">🚪 Offboard</span>. The form shows the <em>Total Savings</em>, the 5% <em>Exit Fee</em>, and the <em>Net Payable</em> figure to the member.</div></li>
+        <li><div class="step-num">3</div><div class="step-text">Enter <strong>Exit Date</strong>, <strong>Reason</strong>, and <strong>Notes / Witnesses</strong>.</div></li>
+        <li><div class="step-num">4</div><div class="step-text">Click <span class="nav-pill red">🚪 Confirm Offboard</span>. The member status changes to <em>Exited</em>.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── 16. QUICK REF ─── -->
+  <div class="section" id="tips">
+    <div class="section-hdr"><span class="icon">📌</span><h2>16 · Quick-Reference Rates &amp; Tips</h2></div>
+    <div class="section-body">
+      <table class="qr-table">
+        <thead><tr><th>Parameter</th><th>Value</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Monthly contribution (MC)</td><td><strong>UGX 100,000</strong></td><td>Standard savings per member per month</td></tr>
+          <tr><td>Member loan rate</td><td><strong>5% per month (flat)</strong></td><td>Max 6 months</td></tr>
+          <tr><td>Non-member loan rate</td><td><strong>10% per month (flat)</strong></td><td>Max 6 months, collateral required</td></tr>
+          <tr><td>Loan approvals required</td><td><strong>3 of 4</strong></td><td>IT Admin, Chairman, Treasurer, Secretary</td></tr>
+          <tr><td>Savings overdue penalty</td><td><strong>UGX 1,000/day</strong></td><td>1% of MC per day after savings due date</td></tr>
+          <tr><td>Loan overdue penalty</td><td>Extra interest, +1 tier per 30 days late</td><td>Shown in Loan Diagnostics card</td></tr>
+          <tr><td>Annual fee (per member)</td><td><strong>UGX 50,000/year</strong></td><td>Operational funds, not savings</td></tr>
+          <tr><td>Standard fine</td><td><strong>UGX 20,000</strong></td><td>Per offence; editable in the fine form</td></tr>
+          <tr><td>Exit fee</td><td><strong>5% of total savings</strong></td><td>Deducted on offboarding</td></tr>
+          <tr><td>Annual savings interest</td><td><strong>2%</strong></td><td>Distributed proportionally on 31 Dec</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="divider">
+      <div class="subsection-title">Common Mistakes to Avoid</div>
+      <ul style="font-size:13px;color:var(--text2);padding-left:18px;line-height:2">
+        <li>Recording a loan before the paper form is signed — always paper first.</li>
+        <li>Using <em>Interest Only</em> mode when the member is paying a full installment — this leaves principal untouched.</li>
+        <li>Running the year-end interest distribution before Dec 31 — preview it, but do not press <em>Process</em> until the correct date.</li>
+        <li>Deleting a savings entry instead of voiding it — deletion removes all audit history.</li>
+        <li>Selecting yourself as the expense approver — the form prevents this but be mindful.</li>
+      </ul>
+
+      <hr class="divider">
+      <div class="subsection-title">Loan Diagnostics (Treasurer-Only View)</div>
+      <p style="font-size:13px;color:var(--text2)">
+        On any loan detail page, a <strong>Loan Diagnostics</strong> card appears for Treasurer and IT Admin only.
+        It shows the <em>Effective Due Date</em>, <em>Late Days</em> (calendar days after due date),
+        and <em>Penalty Tier</em> (penalty increases every 30 late days).
+        Use this to explain to a borrower exactly how much penalty they owe.
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;font-size:11px;color:var(--text3);margin-top:30px;padding-top:20px;border-top:1px solid var(--gray2)">
+    GAZEBO Investment Club · Treasurer's Operational Manual · Internal use only<br>
+    Generated April 2026 · System: GAZEBO GIC v1
+  </div>
+
+</div>
+</body>
+</html>
