@@ -854,6 +854,20 @@ function fmtCompact(n){
   return String(Math.round(value));
 }
 function fmtD(d){if(!d)return"—";try{return new Date(d+"T12:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});}catch(e){return d;}}
+function parseLocalDateOnly(d){
+  if(!d)return null;
+  var parts=String(d).split("-");
+  if(parts.length!==3)return null;
+  var yr=Number(parts[0]),mo=Number(parts[1]),day=Number(parts[2]);
+  if(!yr||!mo||!day)return null;
+  return new Date(yr,mo-1,day,12,0,0,0);
+}
+function dateDiffInDays(fromDate,toDate){
+  if(!(fromDate instanceof Date)||isNaN(fromDate.getTime())||!(toDate instanceof Date)||isNaN(toDate.getTime()))return 0;
+  var fromNoon=new Date(fromDate.getFullYear(),fromDate.getMonth(),fromDate.getDate(),12,0,0,0);
+  var toNoon=new Date(toDate.getFullYear(),toDate.getMonth(),toDate.getDate(),12,0,0,0);
+  return Math.floor((toNoon.getTime()-fromNoon.getTime())/(24*60*60*1000));
+}
 function gid(){return Math.random().toString(36).slice(2,10);}
 function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function jsq(s){return JSON.stringify(String(s||""));}
@@ -1510,22 +1524,25 @@ function loanDueBaseDate(loan){
 function loanDueDate(loanOrDate,months){
   var base=(loanOrDate&&typeof loanOrDate==="object")?loanDueBaseDate(loanOrDate):loanOrDate;
   if(!base)return "";
-  var d=new Date(base+"T12:00:00");
+  var d=parseLocalDateOnly(base)||new Date(base+"T12:00:00");
   if(isNaN(d.getTime()))return "";
   var termMonths=Math.max(1,Number(months)||((loanOrDate&&typeof loanOrDate==="object")?Number(loanOrDate.months)||1:1));
   var dueDays=LOAN_TERM_DAYS*termMonths;
   var due=new Date(d.getTime()+(dueDays*24*60*60*1000));
   return due.toISOString().split("T")[0];
 }
-function getLoanPenaltyMonths(loan,asOfDate){
-  if(!loan||loan.status!=="Active")return 0;
-  var ref=asOfDate?new Date(asOfDate+"T12:00:00"):now();
+function getLoanLateDays(loan,asOfDate){
+  if(!loan)return 0;
   var dueStr=loanDueDate(loan,loan.months);
   if(!dueStr)return 0;
-  var due=new Date(dueStr+"T12:00:00");
-  var lateMs=ref.getTime()-due.getTime();
-  if(lateMs<=0)return 0;
-  var lateDays=Math.floor(lateMs/(24*60*60*1000));
+  var due=parseLocalDateOnly(dueStr);
+  var ref=asOfDate?parseLocalDateOnly(asOfDate):new Date(now().getFullYear(),now().getMonth(),now().getDate(),12,0,0,0);
+  if(!due||!ref)return 0;
+  return Math.max(0,dateDiffInDays(due,ref));
+}
+function getLoanPenaltyMonths(loan,asOfDate){
+  if(!loan||loan.status!=="Active")return 0;
+  var lateDays=getLoanLateDays(loan,asOfDate);
   if(lateDays<=0)return 0;
   // Charge penalty from the first day after default, then every 30 late days.
   return Math.max(1,Math.ceil(lateDays/30));
@@ -2931,11 +2948,7 @@ function rLoanDetail(){
   var c=calcLoan(loan.principal,loan.rate,loan.months),st=loanStat(loan),over=isOverdue(loan);
   var dueDateStr=loanDueDate(loan,loan.months);
   var dueBasis=loan.approvedAt?"Approved Date":(loan.disbursedAt?"Disbursed Date":"Taken Date");
-  var dueDateObj=dueDateStr?new Date(dueDateStr+"T12:00:00"):null;
-  var lateDays=0;
-  if(dueDateObj&&!isNaN(dueDateObj.getTime())){
-    lateDays=Math.max(0,Math.floor((now().getTime()-dueDateObj.getTime())/(24*60*60*1000)));
-  }
+  var lateDays=getLoanLateDays(loan);
   var penaltyTier=st.penaltyMonths>0?String(st.penaltyMonths):"0";
   var showLoanDiagnostics=isAdminUser(S.user)||S.user.access==="treasurer";
   var diagnosticsCard=showLoanDiagnostics?'<div class="card" style="margin-bottom:12px;border-left:4px solid '+(over?'var(--red)':'var(--blue)')+'"><div class="sec-hdr" style="margin-top:0">Loan Diagnostics</div><div class="grid2">'+
@@ -3139,6 +3152,7 @@ function rReports(){
   return'<div class="fadein"><div class="page-hdr"><div><h1 class="fd page-title">Reports</h1><div class="page-sub">'+MS[n.getMonth()]+' '+n.getFullYear()+'</div></div>'+
     '<div class="fl" style="gap:8px;flex-wrap:wrap">'+
       '<button class="btn btn-p btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>'+
+      '<button class="btn btn-g btn-sm" onclick="S.modal={id:\'member-data-audit\',size:\'modal-xl\'};render()">🧮 Member Data Audit</button>'+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreMembersFromLocalBackup()">👥 Restore Members Backup</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'restore-loans\'};render()">♻️ Restore Loans Backup</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreLoansFromAuditLog()">🧾 Recover Loans From Audit</button>':'')+
@@ -3597,7 +3611,7 @@ function rModalContent(){
     "calc-interest":mCalcInterest,"offboard":mOffboard,"add-user":mAddUser,"edit-user":mEditUser,
     "decline-loan":mDeclineLoan,"edit-loan":mEditLoan,"amend-savings":mAmendSavings,"add-expense":mAddExpense,"add-operational-income":mAddOperationalIncome,
     "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment,
-    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans};
+    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans,"member-data-audit":mMemberDataAudit};
   return(map[m.id]||function(){return"";})();
 }
 
@@ -3773,6 +3787,60 @@ function mReconcile(){
     '</div>'+
     mfoot('<button class="btn btn-g" onclick="closeModal()">Close</button>',
       '<button class="btn btn-s btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>');
+}
+
+function mMemberDataAudit(){
+  var memberById={};
+  (S.members||[]).forEach(function(m){memberById[m.id]=m;});
+  var activeLoans=(S.loans||[]).filter(function(l){return l.status==="Active";});
+  var orphanSavings=(S.savings||[]).filter(function(s){return !s.voided&&!memberById[s.memberId];});
+  var orphanRepayments=(S.repayments||[]).filter(function(r){return !S.loans.some(function(l){return l.id===r.loanId;});});
+  var orphanBorrowerLoans=(S.loans||[]).filter(function(l){return l.isMember!==false&&!memberById[l.memberId];});
+  var orphanGuarantorLinks=(S.loans||[]).filter(function(l){return (l.g1Id&&!memberById[l.g1Id])||(l.g2Id&&!memberById[l.g2Id]);});
+  var rows=(S.members||[]).slice().sort(function(a,b){return String(a.no||"").localeCompare(String(b.no||""));}).map(function(m){
+    var savingsTotal=memberTotalSavings(m.id);
+    var locked=memberLockedSavings(m.id);
+    var available=Math.max(0,savingsTotal-locked);
+    var borrowedLoans=activeLoans.filter(function(l){return l.memberId===m.id;});
+    var guaranteedLoans=activeLoans.filter(function(l){return l.g1Id===m.id||l.g2Id===m.id;});
+    var outstandingBorrowed=borrowedLoans.reduce(function(t,l){return t+loanStat(l).outstanding;},0);
+    var issues=[];
+    if(locked>savingsTotal)issues.push("Overlocked");
+    if(borrowedLoans.length&&m.status!=="Active")issues.push("Borrower inactive");
+    if(guaranteedLoans.length&&m.status!=="Active")issues.push("Guarantor inactive");
+    return{no:m.no||"—",name:m.fullName||"—",status:m.status||"—",savingsTotal:savingsTotal,locked:locked,available:available,borrowedCount:borrowedLoans.length,guaranteedCount:guaranteedLoans.length,outstandingBorrowed:outstandingBorrowed,issues:issues};
+  });
+  var totals={
+    members:(S.members||[]).length,
+    activeMembers:(S.members||[]).filter(function(m){return m.status==="Active";}).length,
+    totalSavings:rows.reduce(function(t,r){return t+r.savingsTotal;},0),
+    totalLocked:rows.reduce(function(t,r){return t+r.locked;},0),
+    activeLoanOutstanding:activeLoans.reduce(function(t,l){return t+loanStat(l).outstanding;},0),
+    overdueLoans:activeLoans.filter(function(l){return isOverdue(l);}).length
+  };
+  var alerts=[];
+  if(orphanSavings.length)alerts.push({cls:"alert-err",msg:"Savings records without a valid member: "+orphanSavings.length});
+  if(orphanRepayments.length)alerts.push({cls:"alert-err",msg:"Repayment records without a valid loan: "+orphanRepayments.length});
+  if(orphanBorrowerLoans.length)alerts.push({cls:"alert-err",msg:"Member loans without a valid borrower link: "+orphanBorrowerLoans.length});
+  if(orphanGuarantorLinks.length)alerts.push({cls:"alert-warn",msg:"Loans with missing guarantor links: "+orphanGuarantorLinks.length});
+  if(rows.some(function(r){return r.issues.length;}))alerts.push({cls:"alert-warn",msg:"Members with tally/status issues: "+rows.filter(function(r){return r.issues.length;}).length});
+  if(!alerts.length)alerts.push({cls:"alert-ok",msg:"No member savings/loans integrity issues found in the current dataset."});
+  return mhdr("🧮 Member Savings & Loans Audit")+
+    '<div class="mbody">'+
+      '<div class="alert alert-info" style="font-size:12px;margin-bottom:12px">This audit checks member-linked savings totals, locked savings, borrower/guarantor exposure, and orphaned savings, loans, and repayment links in the current dataset.</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">'+
+        '<div style="background:var(--bg);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Members</div><div style="font-size:18px;font-weight:700;color:var(--navy);margin-top:4px">'+totals.members+'</div><div style="font-size:10px;color:var(--text3)">'+totals.activeMembers+' active</div></div>'+
+        '<div style="background:var(--bg);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Savings Tallied</div><div style="font-size:18px;font-weight:700;color:var(--green);margin-top:4px">'+fmt(totals.totalSavings)+'</div><div style="font-size:10px;color:var(--text3)">Locked '+fmt(totals.totalLocked)+'</div></div>'+
+        '<div style="background:var(--bg);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Active Loan Exposure</div><div style="font-size:18px;font-weight:700;color:var(--red);margin-top:4px">'+fmt(totals.activeLoanOutstanding)+'</div><div style="font-size:10px;color:var(--text3)">'+totals.overdueLoans+' overdue</div></div>'+
+      '</div>'+
+      alerts.map(function(a){return '<div class="alert '+a.cls+'" style="font-size:12px;margin-bottom:6px">'+a.msg+'</div>';}).join('')+
+      '<div class="sec-hdr" style="margin-top:14px">Per-Member Financial Tally</div>'+
+      '<div style="overflow-x:auto"><table class="tbl tbl-sm"><thead><tr><th>No.</th><th>Member</th><th>Status</th><th style="text-align:right">Savings</th><th style="text-align:right">Locked</th><th style="text-align:right">Available</th><th style="text-align:center">Borrowing</th><th style="text-align:center">Guarantees</th><th style="text-align:right">Outstanding</th><th>Check</th></tr></thead><tbody>'+
+        rows.map(function(r){return '<tr'+(r.issues.length?' style="background:#FEF2F2"':'')+'><td class="mono gold-text" style="font-size:11px">'+r.no+'</td><td style="font-weight:600;font-size:12px">'+esc(r.name)+'</td><td>'+esc(r.status)+'</td><td style="text-align:right" class="green-text">'+fmt(r.savingsTotal)+'</td><td style="text-align:right" class="red-text">'+fmt(r.locked)+'</td><td style="text-align:right">'+fmt(r.available)+'</td><td style="text-align:center">'+r.borrowedCount+'</td><td style="text-align:center">'+r.guaranteedCount+'</td><td style="text-align:right">'+fmt(r.outstandingBorrowed)+'</td><td>'+(r.issues.length?'<span class="bdg bdg-danger">'+esc(r.issues.join(", "))+'</span>':'<span class="bdg bdg-success">OK</span>')+'</td></tr>';}).join('')+
+      '</tbody></table></div>'+
+      '<div style="font-size:10px;color:var(--text3);margin-top:8px">Audit run: '+now().toLocaleString("en-UG")+' · Savings: '+(S.savings||[]).length+' · Loans: '+(S.loans||[]).length+' · Repayments: '+(S.repayments||[]).length+'</div>'+
+    '</div>'+
+    mfoot('<button class="btn btn-g" onclick="closeModal()">Close</button>','<button class="btn btn-s btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>');
 }
 
 async function removeFutureSavings(){
