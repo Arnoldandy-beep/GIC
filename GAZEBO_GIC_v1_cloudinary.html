@@ -1331,14 +1331,30 @@ function isMemberOffboarded(m){
 }
 
 // ─── ACTIVE SAVINGS POOL (excludes exited members) ──
-// Banking standard: when a member exits and their money is returned,
-// that capital ceases to form part of the club's investable savings pool.
+// Source of truth for pool math is member savings net of active loan locks.
+function activePoolTotals(opts){
+  opts=opts||{};
+  var toCurrentMonth=!!opts.toCurrentMonth;
+  var nowD=now();
+  return S.members.filter(function(m){return m&&!isMemberOffboarded(m)&&m.status==="Active";}).reduce(function(acc,m){
+    var gross=S.savings.filter(function(s){
+      if(s.voided||s.memberId!==m.id)return false;
+      if(!toCurrentMonth)return true;
+      return s.yr<nowD.getFullYear()||(s.yr===nowD.getFullYear()&&s.mo<=nowD.getMonth());
+    }).reduce(function(t,s){return t+s.amount;},0);
+    var locked=memberLockedSavings(m.id);
+    var available=Math.max(0,gross-locked);
+    acc.gross+=gross;
+    acc.locked+=locked;
+    acc.available+=available;
+    return acc;
+  },{gross:0,locked:0,available:0});
+}
 function activePoolSavings(){
-  return S.savings.filter(function(s){
-    if(s.voided)return false;
-    var mem=S.members.filter(function(m){return m.id===s.memberId;})[0];
-    return mem&&!isMemberOffboarded(mem);
-  }).reduce(function(t,s){return t+s.amount;},0);
+  return activePoolTotals().available;
+}
+function activePoolSavingsGross(){
+  return activePoolTotals().gross;
 }
 
 // ─── ADVANCE SAVINGS ALLOCATION ─────────────────────
@@ -1720,7 +1736,9 @@ function normalizeLoanGuarantorLocks(){
 //                 – Locked Savings (pledged as collateral)
 // This is the real-time deployable capital for new loans.
 function calcLoanPortfolioTotals(asOfDate){
-  var savingsPool=activePoolSavings();
+  var pool=activePoolTotals();
+  var savingsPool=pool.available;
+  var savingsPoolGross=pool.gross;
   var activeLoans=S.loans.filter(function(l){return l.status==="Active";});
   var closedLoans=S.loans.filter(function(l){return l.status==="Cleared";});
   var pendingLoans=S.loans.filter(function(l){return l.status==="Pending";});
@@ -1738,9 +1756,10 @@ function calcLoanPortfolioTotals(asOfDate){
   var interestCollectedAll=nonDeclinedStats.reduce(function(t,x){return t+x.stat.paidInterest;},0);
   var overdueStats=activeStats.filter(function(x){return isOverdue(x.loan);});
   var overdueInterest=overdueStats.reduce(function(t,x){return t+x.stat.outstandingInterest;},0);
-  var cashAvailable=savingsPool-outstandingPrincipal;
+  var cashAvailable=savingsPool;
   return{
     savingsPool:savingsPool,
+    savingsPoolGross:savingsPoolGross,
     activeLoanCount:activeLoans.length,
     closedLoanCount:closedLoans.length,
     pendingLoanCount:pendingLoans.length,
@@ -1774,7 +1793,7 @@ function calcAvailableLoanFunds(){
     lockedCollateral:lockedCollateral,
     pendingExpenses:pendingExpenses,
     available:p.availableCash,
-    utilizationPct:p.savingsPool>0?Math.round((p.outstandingPrincipal/p.savingsPool)*100):0
+    utilizationPct:p.savingsPoolGross>0?Math.round((p.outstandingPrincipal/p.savingsPoolGross)*100):0
   };
 }
 
@@ -2257,6 +2276,7 @@ function rDashboard(){
   var n=now();
   var totalSav=S.savings.filter(function(s){return!s.voided;}).reduce(function(t,s){return t+s.amount;},0);
   var totalActivePool=activePoolSavings(); // excludes exited members
+  var totalActivePoolGross=activePoolSavingsGross();
   var portfolio=calcLoanPortfolioTotals();
   var lf=calcAvailableLoanFunds(); // available loan funds
   var totalAnnualFees=annualFeesCollected();
@@ -2270,12 +2290,7 @@ function rDashboard(){
   var pE=S.expenses.filter(function(e){return e.status==="Pending";});
   var def=S.members.filter(function(m){return m.status==="Active"&&!S.savings.some(function(s){return s.memberId===m.id&&!s.voided&&s.yr===n.getFullYear()&&s.mo===n.getMonth();});});
   var monthSav=S.savings.filter(function(s){return!s.voided&&s.yr===n.getFullYear()&&s.mo===n.getMonth();}).reduce(function(t,s){return t+s.amount;},0);
-  var currentActivePool=S.savings.filter(function(s){
-    if(s.voided)return false;
-    if(s.yr>n.getFullYear()||(s.yr===n.getFullYear()&&s.mo>n.getMonth()))return false;
-    var mem=S.members.filter(function(m){return m.id===s.memberId;})[0];
-    return mem&&mem.status==="Active";
-  }).reduce(function(t,s){return t+s.amount;},0);
+  var currentActivePool=activePoolTotals({toCurrentMonth:true}).available;
   var poolVariance=totalActivePool-currentActivePool;
 
   // Penalty / deadline checks
@@ -2349,17 +2364,18 @@ function rDashboard(){
         return'<div class="stat-card" style="cursor:pointer" onclick="'+s[3]+'"><div class="stat-icon" style="background:#C9A84C1A">'+s[2]+'</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+s[0]+'</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+s[1]+'</div></div></div>';}).join("")+'</div>'+
     '<div class="card" style="margin-bottom:14px;padding:12px 14px">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'+
-        '<div><h3 style="font-size:13px;font-weight:700;color:var(--navy);margin:0 0 4px 0">Pool Views</h3><div style="font-size:11px;color:var(--text3)">Current Active Pool shows paid savings to this month for active members only. Total Active Pool includes all posted savings for non-exited members, including advance/future allocations.</div></div>'+
+        '<div><h3 style="font-size:13px;font-weight:700;color:var(--navy);margin:0 0 4px 0">Pool Views</h3><div style="font-size:11px;color:var(--text3)">Pool values are now net of active loan locks (member savings minus locked collateral). Gross active savings shown for reference.</div></div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<div style="background:var(--bg);border:1px solid var(--gray2);border-radius:10px;padding:8px 10px;min-width:180px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600">Current Active Pool</div><div style="font-size:14px;font-weight:700;color:var(--navy)">'+fmt(currentActivePool)+'</div></div>'+
           '<div style="background:var(--bg);border:1px solid var(--gray2);border-radius:10px;padding:8px 10px;min-width:180px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600">Total Active Pool</div><div style="font-size:14px;font-weight:700;color:var(--navy)">'+fmt(totalActivePool)+'</div></div>'+
+          '<div style="background:var(--bg);border:1px solid var(--gray2);border-radius:10px;padding:8px 10px;min-width:180px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600">Gross Active Savings</div><div style="font-size:14px;font-weight:700;color:var(--text2)">'+fmt(totalActivePoolGross)+'</div></div>'+
           '<div style="background:var(--bg);border:1px solid var(--gray2);border-radius:10px;padding:8px 10px;min-width:180px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600">Difference</div><div style="font-size:14px;font-weight:700;color:var(--gold)">'+fmt(poolVariance)+'</div></div>'+
         '</div>'+
       '</div>'+
     '</div>'+
     '<div class="grid3" style="margin-bottom:14px">'+
       '<div class="stat-card"><div class="stat-icon" style="background:#05a55533">💳</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Annual Fees (2026)</div><div style="font-size:14px;font-weight:700;color:var(--green);margin-top:2px">'+fmt(totalAnnualFees)+'</div><div style="font-size:10px;color:var(--text3)">Tracked separately</div></div></div>'+
-      '<div class="stat-card"><div class="stat-icon" style="background:#1D4ED833">🏦</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Loan Cash Available</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px">'+fmt(portfolio.availableCash)+'</div><div style="font-size:10px;color:var(--text3)">Savings pool less principal outstanding</div></div></div>'+
+      '<div class="stat-card"><div class="stat-icon" style="background:#1D4ED833">🏦</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Loan Cash Available</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px">'+fmt(portfolio.availableCash)+'</div><div style="font-size:10px;color:var(--text3)">Net active pool (without locks)</div></div></div>'+
       '<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">📅</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">This Month</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px">'+fmt(monthSav)+'</div><div style="font-size:10px;color:var(--text3)">'+MS[n.getMonth()]+" "+n.getFullYear()+'</div></div></div>'+
     '</div>'+latestMinutesBlock+
     '<div class="grid2" style="margin-bottom:14px">'+
@@ -2403,8 +2419,9 @@ function rDashboard(){
         activeLoans.slice(0,5).map(function(ln){var st=loanStat(ln);return'<div style="padding:6px 0;border-bottom:1px solid var(--gray2);cursor:pointer" onclick="goLoanDetail(\''+ln.id+'\')"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:12px;font-weight:600">'+esc(ln.borrower)+'</span><span style="font-size:11px;color:var(--text3)">'+fmt(st.outstanding)+'</span></div><div class="progress-bar"><div class="progress-fill" style="width:'+st.pct+'%;background:'+(st.pct>=100?"var(--green)":st.pct>=60?"var(--gold)":"var(--red)")+'"></div></div></div>';}).join("")||'<div class="no-data">No active loans</div>'+
       '</div>'+
       '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Club Summary</h3>'+
-        [["Current Active Pool (to-date)",fmt(currentActivePool)],
-         ["Total Active Pool (all posted)",fmt(totalActivePool)],
+        [["Current Active Pool (net)",fmt(currentActivePool)],
+         ["Total Active Pool (net)",fmt(totalActivePool)],
+         ["Gross Active Savings",fmt(totalActivePoolGross)],
          ["Difference",fmt(poolVariance)],
          ["Historical (incl. exited)",fmt(totalSav)],
            ["Available for New Loans",fmt(portfolio.availableCash)],
@@ -2864,13 +2881,14 @@ function rSavings(){
   } else {
     content=rAmendmentsList();
   }
-  // Active savings pool — excludes exited members (their funds have been returned)
+  // Active savings pool — net of locks and excludes exited members
   var activeSav=activePoolSavings();
+  var activeSavGross=activePoolSavingsGross();
   // Historical total (all records including exited, for audit/trend purposes)
   var historicalTotal=S.savings.filter(function(s){return!s.voided;}).reduce(function(t,s){return t+s.amount;},0);
   var hasFutureOrExited=activeSav!==historicalTotal;
   return'<div class="fadein"><div class="page-hdr">'+
-    '<div><h1 class="fd page-title">Savings</h1><div class="page-sub">Active members pool: <strong>'+fmt(activeSav)+'</strong>'+(hasFutureOrExited?' <span style="color:var(--text3);font-size:11px">(historical total: '+fmt(historicalTotal)+')</span>':'')+'</div></div>'+
+    '<div><h1 class="fd page-title">Savings</h1><div class="page-sub">Active members pool (net): <strong>'+fmt(activeSav)+'</strong> <span style="color:var(--text3);font-size:11px">(gross: '+fmt(activeSavGross)+')</span>'+(hasFutureOrExited?' <span style="color:var(--text3);font-size:11px">(historical total: '+fmt(historicalTotal)+')</span>':'')+'</div></div>'+
     '<div class="fl flw"><button class="btn btn-g btn-sm" onclick="S.modal={id:\'reconcile\',size:\'modal-xl\'};render()">🔍 Reconcile</button>'+
     (CAN(S.user,"record_savings")?'<button class="btn btn-p btn-sm" onclick="S.modal={id:\'add-savings\'};render()">+ Record</button>':"")+
     '</div></div><div class="card">'+tabs+content+'</div></div>';
@@ -3031,7 +3049,7 @@ function rLoanList(){
       '<div class="progress-bar"><div class="progress-fill" style="width:'+Math.min(100,lf.utilizationPct)+'%;background:'+(lf.utilizationPct>80?"var(--red)":lf.utilizationPct>60?"var(--gold)":"var(--green)")+'"></div></div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--text3);background:var(--bg);border-radius:6px;padding:7px 10px">'+
-      '<strong>Formula:</strong> Available = Savings Pool − Principal Outstanding &nbsp;·&nbsp; '+
+        '<strong>Formula:</strong> Available = Active Savings Pool (without locks) &nbsp;·&nbsp; '+
       'Pool excludes exited members\' returned funds</div>'+
   '</div>';
 
@@ -3255,7 +3273,8 @@ function rIntHistory(){
 // ─── 23. REPORTS ───────────────────────────────────
 function rReports(){
   var n=now();
-  var totalSav=activePoolSavings(); // Use same calculation as dashboard - excludes exited members
+  var totalSav=activePoolSavings(); // net of locks
+  var totalSavGross=activePoolSavingsGross();
   var portfolio=calcLoanPortfolioTotals();
   var totalLoaned=S.loans.reduce(function(t,l){return t+l.principal;},0);
   var totalOut=portfolio.outstandingPrincipal;
@@ -3274,7 +3293,7 @@ function rReports(){
       (canClearData?'<button class="btn btn-d btn-sm" onclick="clearAllHavingsData()">🧹 Clear all savings/loan/expense data</button>':'')+
     '</div></div>'+
     '<div class="grid4" style="margin-bottom:14px">'+
-      [["Savings Pool",fmt(totalSav),"💰"],["Annual Fees",fmt(totalFees),"💳"],["Expenses",fmt(totalExp),"💸"],["Outstanding",fmt(totalOut),"⚠️"]].map(function(s){
+      [["Savings Pool (Net)",fmt(totalSav),"💰"],["Savings Pool (Gross)",fmt(totalSavGross),"💼"],["Expenses",fmt(totalExp),"💸"],["Outstanding",fmt(totalOut),"⚠️"]].map(function(s){
         return'<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">'+s[2]+'</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+s[0]+'</div><div style="font-size:13px;font-weight:700;color:var(--navy);margin-top:2px">'+s[1]+'</div></div></div>';}).join("")+'</div>'+
     '<div class="grid2" style="margin-bottom:14px">'+
       '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Membership</h3>'+
@@ -3282,7 +3301,8 @@ function rReports(){
           ["Exited Members",S.members.filter(function(m){return isMemberOffboarded(m);}).length],
           ["Paid This Month",S.members.filter(function(m){return S.savings.some(function(s){return s.memberId===m.id&&!s.voided&&s.yr===n.getFullYear()&&s.mo===n.getMonth();});}).length],
           ["2026 Fees Collected",fmt(totalFees)],
-          ["Savings Pool",fmt(totalSav)],
+            ["Savings Pool (Net)",fmt(totalSav)],
+            ["Savings Pool (Gross)",fmt(totalSavGross)],
           ["Available for Loans",fmt(portfolio.availableCash)]])+
       '</div>'+
       '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Loans</h3>'+
@@ -3847,10 +3867,12 @@ function mReconcile(){
   var grandTotalFuture=futureRecs.reduce(function(t,s){return t+s.amount;},0);
   var activeMemberTotal=activeMembers.reduce(function(t,p){return t+p.total;},0);
   var activeMemberCurrentTotal=activeMembers.reduce(function(t,p){return t+p.currentTotal;},0);
+  var activeLockedTotal=activeMembers.reduce(function(t,p){return t+memberLockedSavings(p.id);},0);
+  var activeAvailableTotal=Math.max(0,activeMemberTotal-activeLockedTotal);
   var exitedMemberTotal=exitedMembers.reduce(function(t,p){return t+p.total;},0);
   var voidedTotal=voidedRecs.reduce(function(t,s){return t+s.amount;},0);
   var orphanTotal=orphanRecs.reduce(function(t,s){return t+s.amount;},0);
-  var fnGrandTotal=S.savings.filter(function(s){return!s.voided;}).reduce(function(t,s){return t+s.amount;},0);
+  var fnGrandTotal=activePoolSavings();
   // ── Issues ──
   var issues=[];
   if(exitedMemberTotal>0) issues.push({icon:"🚪",msg:"Exited member savings of "+fmt(exitedMemberTotal)+" are included in the pool total but not shown in the active members table.",sev:"info"});
@@ -3904,18 +3926,19 @@ function mReconcile(){
       // ── Grand total math ──
       '<div style="background:var(--navy);border-radius:10px;padding:14px;color:white;margin-bottom:14px">'+
         '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--gold);margin-bottom:8px">RECONCILIATION MATH</div>'+
-        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #1E3350"><span>Active members (all months incl. future)</span><span style="font-weight:700">'+fmt(activeMemberTotal)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #1E3350"><span>Active members gross (all months)</span><span style="font-weight:700">'+fmt(activeMemberTotal)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #1E3350;color:#9CA3AF"><span>− Active loan locks</span><span style="font-weight:700">− '+fmt(activeLockedTotal)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:15px;font-weight:700;border-top:2px solid var(--gold);margin-top:4px"><span>= Active pool (net)</span><span>'+fmt(activeAvailableTotal)+'</span></div>'+
         (exitedMemberTotal>0?'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #1E3350;color:#9CA3AF"><span>+ Exited member savings</span><span style="font-weight:700">+ '+fmt(exitedMemberTotal)+'</span></div>':"")+
-        '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:15px;font-weight:700;border-top:2px solid var(--gold);margin-top:4px"><span>= Grand Total (all records)</span><span>'+fmt(grandTotalAll)+'</span></div>'+
-        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#7F8C9A"><span>Dashboard shows</span><span>'+fmt(fnGrandTotal)+'</span></div>'+
-        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:'+(grandTotalAll===fnGrandTotal?"#6EE7B7":"#F87171")+'"><span>Match?</span><span>'+(grandTotalAll===fnGrandTotal?"✅ Yes — totals match":"❌ MISMATCH of "+fmt(Math.abs(grandTotalAll-fnGrandTotal)))+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#7F8C9A"><span>Dashboard shows (net pool)</span><span>'+fmt(fnGrandTotal)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:'+(activeAvailableTotal===fnGrandTotal?"#6EE7B7":"#F87171")+'"><span>Match?</span><span>'+(activeAvailableTotal===fnGrandTotal?"✅ Yes — totals match":"❌ MISMATCH of "+fmt(Math.abs(activeAvailableTotal-fnGrandTotal)))+'</span></div>'+
         (voidedTotal>0?'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:#6B7280"><span>Voided records excluded</span><span>'+fmt(voidedTotal)+' ('+voidedRecs.length+' records)</span></div>':"")+
       '</div>'+
       // ── Correct Active-Only Total ──
       '<div style="background:#DEF7EC;border:2px solid #10B981;border-radius:10px;padding:14px;margin-bottom:14px">'+
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#065F46;margin-bottom:6px">✅ ACTUAL SAVINGS POOL (Active Members, All Months)</div>'+
-        '<div style="font-size:26px;font-weight:700;color:#057A55;font-family:\'Playfair Display\',serif">'+fmt(activeMemberTotal)+'</div>'+
-        '<div style="font-size:12px;color:#065F46;margin-top:4px">This includes all savings entries for active members, including future advance payments.'+(exitedMemberTotal>0?' Excludes exited member savings.':'')+'</div>'+
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#065F46;margin-bottom:6px">✅ ACTUAL SAVINGS POOL (Active Members, Net of Locks)</div>'+
+        '<div style="font-size:26px;font-weight:700;color:#057A55;font-family:\'Playfair Display\',serif">'+fmt(activeAvailableTotal)+'</div>'+
+        '<div style="font-size:12px;color:#065F46;margin-top:4px">This is active-member savings minus locked collateral on active loans.'+(exitedMemberTotal>0?' Excludes exited member savings.':'')+'</div>'+
       '</div>'+
       // ── Issues ──
       issueHtml+
