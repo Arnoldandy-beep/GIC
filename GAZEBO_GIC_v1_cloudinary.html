@@ -1848,16 +1848,18 @@ function totalApprovedExpenses(){
 function calcInterestDistribution(year){
   var pool=0;
   S.loans.forEach(function(l){
+    // If manually set interest and loan was cleared, use that
     if(l.manualRealizedInterest!=null&&Number(l.manualRealizedInterest)>0&&l.clearedAt){
       if(new Date(l.clearedAt+"T12:00:00").getFullYear()===year){
         pool+=Number(l.manualRealizedInterest)||0;
       }
       return;
     }
+    // Only include loans issued in this year
     if(new Date(l.issued+"T12:00:00").getFullYear()!==year)return;
+    // Use TOTAL scheduled interest (captures all interest earned on the loan, active or not)
     var c=calcLoan(l.principal,l.rate,l.months);
-    var paid=S.repayments.filter(function(r){return r.loanId===l.id&&new Date(r.date+"T12:00:00").getFullYear()===year;}).reduce(function(t,r){return t+r.amount;},0);
-    pool+=Math.min(paid*(c.total>0?c.interest/c.total:0),c.interest);
+    pool+=c.interest;
   });
   pool=Math.round(pool);
   var decEnd=new Date(year,11,31);
@@ -1878,9 +1880,8 @@ function calcInterestDistribution(year){
 function getInterestPoolBreakdown(year){
   var breakdown=[];
   S.loans.forEach(function(l){
-    var contribInterest=0;
-    var repaidAmount=0;
     var scheduledInterest=0;
+    var loanStatus="";
     
     if(l.manualRealizedInterest!=null&&Number(l.manualRealizedInterest)>0&&l.clearedAt){
       if(new Date(l.clearedAt+"T12:00:00").getFullYear()===year){
@@ -1891,6 +1892,7 @@ function getInterestPoolBreakdown(year){
           rate:l.rate,
           months:l.months,
           issued:l.issued,
+          status:"Cleared",
           source:"Manual",
           scheduledInterest:Number(l.manualRealizedInterest),
           repaidAmount:"—",
@@ -1903,24 +1905,22 @@ function getInterestPoolBreakdown(year){
     if(new Date(l.issued+"T12:00:00").getFullYear()!==year)return;
     
     var c=calcLoan(l.principal,l.rate,l.months);
-    repaidAmount=S.repayments.filter(function(r){return r.loanId===l.id&&new Date(r.date+"T12:00:00").getFullYear()===year;}).reduce(function(t,r){return t+r.amount;},0);
     scheduledInterest=c.interest;
-    contribInterest=Math.min(repaidAmount*(c.total>0?c.interest/c.total:0),c.interest);
+    loanStatus=l.status||"Unknown";
     
-    if(repaidAmount>0){
-      breakdown.push({
-        loanNo:l.no,
-        borrower:l.borrower,
-        principal:l.principal,
-        rate:l.rate,
-        months:l.months,
-        issued:l.issued,
-        source:"Repayments",
-        scheduledInterest:scheduledInterest,
-        repaidAmount:repaidAmount,
-        contributedInterest:Math.round(contribInterest)
-      });
-    }
+    breakdown.push({
+      loanNo:l.no,
+      borrower:l.borrower,
+      principal:l.principal,
+      rate:l.rate,
+      months:l.months,
+      issued:l.issued,
+      status:loanStatus,
+      source:"Calculated",
+      scheduledInterest:scheduledInterest,
+      repaidAmount:"—",
+      contributedInterest:Math.round(scheduledInterest)
+    });
   });
   return breakdown;
 }
@@ -3301,19 +3301,19 @@ function rIntOverview(){
   var rows=p.distributions.filter(function(d){return d.savings>0;}).sort(function(a,b){return b.savings-a.savings;}).map(function(d){
     return'<tr><td class="mono gold-text">'+d.memberNo+'</td><td>'+esc(d.memberName)+'</td><td class="green-text">'+fmt(d.savings)+'</td><td>'+(p.totalSav>0?((d.savings/p.totalSav)*100).toFixed(1)+"%":"0%")+'</td><td style="font-weight:700">'+fmt(d.interest)+'</td></tr>';}).join("");
   var breakdownRows=breakdown.map(function(b){
-    return'<tr><td class="mono">'+esc(b.loanNo)+'</td><td>'+esc(b.borrower)+'</td><td>'+fmt(b.principal)+'</td><td>'+b.rate+'%</td><td>'+fmt(b.scheduledInterest)+'</td><td>'+(b.repaidAmount==="—"?"—":fmt(b.repaidAmount))+'</td><td style="font-weight:700;color:var(--green)">'+fmt(b.contributedInterest)+'</td></tr>';}).join("");
+    return'<tr><td class="mono">'+esc(b.loanNo)+'</td><td>'+esc(b.borrower)+'</td><td>'+fmt(b.principal)+'</td><td>'+b.rate+'%</td><td>'+fmt(b.scheduledInterest)+'</td><td><span class="bdg bdg-'+(b.status==="Active"?"warning":b.status==="Cleared"?"success":"gray")+'">'+b.status+'</span></td><td style="font-weight:700;color:var(--green)">'+fmt(b.contributedInterest)+'</td></tr>';}).join("");
   return'<div class="grid2" style="margin-bottom:14px">'+
     '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Interest Policy</h3>'+
       '<div class="info-box"><div style="font-weight:600;margin-bottom:6px">Formula: Member Savings × Effective Rate</div>'+
         '<div style="font-size:12px">Nominal Rate: <strong>'+SAV_INT+'% p.a.</strong> (simple)</div>'+
-        '<div style="font-size:12px;margin-top:3px">Source: Loan interest recovery pool</div>'+
-        '<div style="font-size:12px;margin-top:3px">Distributed: 31 December annually · Pro-rata</div>'+
+        '<div style="font-size:12px;margin-top:3px">Source: Total earned interest on all loans (issued in '+n.getFullYear()+')</div>'+
+        '<div style="font-size:12px;margin-top:3px">Includes interest on active loans · Distributed: 31 December annually · Pro-rata</div>'+
         '<div style="font-size:12px;margin-top:3px">Effective Rate = min('+SAV_INT+'%, Pool ÷ Total Savings)</div></div></div>'+
     '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">'+n.getFullYear()+' Preview</h3>'+
-      [["Interest Pool",fmt(p.interestPool)],["Total Savings",fmt(p.totalSav)],["Max at "+SAV_INT+"%",fmt(p.required)],["Actual Pool",fmt(p.actualPool)],["Effective Rate",p.effRate+"%"],["Total to Distribute",fmt(p.totalDistributed)]].map(function(x){return'<div class="kv-row"><span class="kv-label">'+x[0]+'</span><span class="kv-value">'+x[1]+'</span></div>';}).join("")+
+      [["Interest Pool (Total Loans)",fmt(p.interestPool)],["Total Savings",fmt(p.totalSav)],["Max at "+SAV_INT+"%",fmt(p.required)],["Actual Pool",fmt(p.actualPool)],["Effective Rate",p.effRate+"%"],["Total to Distribute",fmt(p.totalDistributed)]].map(function(x){return'<div class="kv-row"><span class="kv-label">'+x[0]+'</span><span class="kv-value">'+x[1]+'</span></div>';}).join("")+
       '<div class="alert alert-info" style="margin-top:10px;font-size:11px">Preview only. Process on 31 Dec '+n.getFullYear()+'.</div></div></div>'+
     '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">💰 Loan Interest Breakdown (Source of '+fmt(p.interestPool)+')</h3>'+
-      (breakdown.length?'<table class="tbl tbl-sm"><thead><tr><th>Loan</th><th>Borrower</th><th>Principal</th><th>Rate</th><th>Scheduled Interest</th><th>Repaid in '+n.getFullYear()+'</th><th>Interest Contributed</th></tr></thead><tbody>'+breakdownRows+'</tbody></table>':'<div class="no-data">No loans with repayments in '+n.getFullYear()+'</div>')+
+      (breakdown.length?'<table class="tbl tbl-sm"><thead><tr><th>Loan</th><th>Borrower</th><th>Principal</th><th>Rate</th><th>Scheduled Interest</th><th>Status</th><th>Contributed to Pool</th></tr></thead><tbody>'+breakdownRows+'</tbody></table>':'<div class="no-data">No loans issued in '+n.getFullYear()+'</div>')+
     '</div>'+
     '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Projected Distributions</h3>'+
       '<table class="tbl tbl-sm"><thead><tr><th>No.</th><th>Member</th><th>Savings</th><th>% Share</th><th>Interest</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
