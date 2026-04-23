@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"function load\\\\|function save\\\\|localStorage\\\\|fetchAll\\\\|S\\\\\\\\.members\\\\|S\\\\\\\\.loans\\\\|S\\\\\\\\.savings\\\\|S\\\\\\\\.expenses\" /c/Users/Administrator/Documents/ProjectAI/GIC/GIC-GIT/GAZEBO_GIC_v1_cloudinary.html)",
+      "Bash(find /c/Users/Administrator/Documents/ProjectAI/GIC/GIC-GIT -type f \\\\\\( -not -path \"*/.git/*\" \\\\\\) -exec ls -lh {} \\\\;)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(sort -k2)"
+    ]
+  }
+}
