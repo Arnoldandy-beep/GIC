@@ -2483,7 +2483,17 @@ function rDashboard(){
       '<div class="stat-card"><div class="stat-icon" style="background:#05a55533">💳</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Annual Fees (2026)</div><div style="font-size:14px;font-weight:700;color:var(--green);margin-top:2px">'+fmt(totalAnnualFees)+'</div><div style="font-size:10px;color:var(--text3)">Tracked separately</div></div></div>'+
       '<div class="stat-card"><div class="stat-icon" style="background:#1D4ED833">🏦</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Loan Cash Available</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px">'+fmt(portfolio.availableCash)+'</div><div style="font-size:10px;color:var(--text3)">Net active pool (without locks)</div></div></div>'+
       '<div class="stat-card"><div class="stat-icon" style="background:#C9A84C1A">📅</div><div style="min-width:0"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">This Month</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:2px">'+fmt(monthSav)+'</div><div style="font-size:10px;color:var(--text3)">'+MS[n.getMonth()]+" "+n.getFullYear()+'</div></div></div>'+
-    '</div>'+latestMinutesBlock+
+    '</div>'+
+    (def.length?
+      '<div class="card" style="border:2px solid var(--orange);margin-bottom:14px">'+
+        '<div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--orange)">💰 Current Month Defaulters ('+def.length+')</h3></div>'+
+        '<table class="tbl tbl-sm"><thead><tr><th>No.</th><th>Member</th><th>Phone</th><th>Arrears</th><th>Status</th><th></th></tr></thead><tbody>'+defRows+'</tbody></table>'+
+      '</div>':'<div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:160px;border:2px solid var(--green);background:linear-gradient(135deg,var(--green)10%,#f0f9f0);margin-bottom:14px">'+
+        '<div style="font-size:40px;margin-bottom:10px">✅</div>'+
+        '<div style="font-size:15px;font-weight:700;color:var(--green);margin-bottom:4px">All Members Paid This Month!</div>'+
+        '<div style="font-size:12px;color:var(--text3);text-align:center">No defaulters detected for '+MS[n.getMonth()]+' '+n.getFullYear()+'</div>'+
+      '</div>')+
+    latestMinutesBlock+
     '<div class="grid2" style="margin-bottom:14px">'+
       '<div class="card"><div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--navy)">Loan Committee</h3><span class="bdg bdg-info">'+committeeUsers.length+' approvers · any '+loanApprovalThreshold()+' required</span></div>'+
         '<div style="display:flex;flex-wrap:wrap;gap:8px">'+committeeUsers.map(function(u){return'<div style="background:var(--bg);border-radius:8px;padding:8px 10px;min-width:150px"><div style="font-size:12px;font-weight:700;color:var(--navy)">'+esc(u.name)+'</div><div style="font-size:11px;color:var(--text3)">'+esc(roleLabel(u))+'</div></div>';}).join("")+'</div></div>'+
@@ -2501,15 +2511,6 @@ function rDashboard(){
         '</div>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:14px">'+
-        (def.length?
-          '<div class="card" style="border:2px solid var(--orange);height:fit-content">'+
-            '<div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--orange)">💰 Current Month Defaulters ('+def.length+')</h3></div>'+
-            '<table class="tbl tbl-sm"><thead><tr><th>No.</th><th>Member</th><th>Phone</th><th>Arrears</th><th>Status</th><th></th></tr></thead><tbody>'+defRows+'</tbody></table>'+
-          '</div>':'<div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;border:2px solid var(--green);background:linear-gradient(135deg,var(--green)10%,#f0f9f0)">'+
-            '<div style="font-size:48px;margin-bottom:12px">✅</div>'+
-            '<div style="font-size:16px;font-weight:700;color:var(--green);margin-bottom:4px">All Members Paid This Month!</div>'+
-            '<div style="font-size:12px;color:var(--text3);text-align:center">No defaulters detected for '+MS[n.getMonth()]+' '+n.getFullYear()+'</div>'+
-          '</div>')+
         '<div class="card" style="border:2px solid var(--red);height:fit-content">'+
           '<div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--red)">🔴 Overdue Loan Defaulters ('+overdueLoans.length+')</h3></div>'+
           (overdueLoans.length
