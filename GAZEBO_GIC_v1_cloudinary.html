@@ -858,6 +858,7 @@ var S={
   lockouts:{},loading:true,toast:null,realtimeListenersActive:false,
   memberSearch:"",memberStatusFilter:"Active",minutesSearch:"",minutesQuarter:"all",
   finesFilter:"all",
+  feeSortBy:"",feeSortDir:"asc",
   savTab:"overview",savMemberId:"",loanTab:"all",loanMetricFilter:"all",loanSortBy:"",loanSortDir:"asc",intTab:"overview",expTab:"list",
   usersTab:"admin"
 };
@@ -2743,7 +2744,32 @@ function rAnnualFees(){
   var paid=activeMembers.filter(function(m){return(m.annualFees||[]).some(function(f){return f.year===year&&f.status==="Paid";});});
   var unpaid=activeMembers.filter(function(m){return!(m.annualFees||[]).some(function(f){return f.year===year&&f.status==="Paid";});});
   var totalCollected=paid.reduce(function(t,m){var f=(m.annualFees||[]).filter(function(x){return x.year===year&&x.status==="Paid";})[0];return t+(f?f.amount:0);},0);
-  var rows=activeMembers.map(function(m){
+  
+  // Sort members based on current sort preference
+  var sortedMembers=activeMembers.slice().sort(function(a,b){
+    var dir=S.feeSortDir==="asc"?1:-1;
+    var sortBy=S.feeSortBy||"member";
+    var feeA=(a.annualFees||[]).filter(function(f){return f.year===year;})[0];
+    var feeB=(b.annualFees||[]).filter(function(f){return f.year===year;})[0];
+    
+    if(sortBy==="member"){return a.fullName.localeCompare(b.fullName)*dir;}
+    if(sortBy==="amount"){
+      var amtA=(feeA&&feeA.amount)||REG_FEE;
+      var amtB=(feeB&&feeB.amount)||REG_FEE;
+      return(amtA-amtB)*dir;
+    }
+    if(sortBy==="status"){
+      var statA=(feeA&&feeA.status)||"Unpaid";
+      var statB=(feeB&&feeB.status)||"Unpaid";
+      return statA.localeCompare(statB)*dir;
+    }
+    if(sortBy==="date"){
+      var dateA=(feeA&&feeA.date)||"";var dateB=(feeB&&feeB.date)||"";if(!dateA)return dir;if(!dateB)return-dir;return dateA.localeCompare(dateB)*dir;
+    }
+    return 0;
+  });
+  
+  var rows=sortedMembers.map(function(m){
     var fee=(m.annualFees||[]).filter(function(f){return f.year===year;})[0];
     var actions='';
     if((!fee||fee.status!=="Paid")&&CAN(S.user,"manage_fees"))actions+='<button class="btn btn-grn btn-sm" style="font-size:10px;padding:3px 8px" onclick="markFeePaid(\''+m.id+'\','+year+')">Mark Paid</button>';
@@ -2762,7 +2788,12 @@ function rAnnualFees(){
     '</div>'+
     '<div class="card">'+
       '<div class="alert alert-info" style="font-size:12px;margin-bottom:12px">Annual fees of UGX '+REG_FEE.toLocaleString()+'/member/year cover operational costs and are tracked <strong>separately</strong> from the savings pool. Due by <strong>'+annualFeeDeadline(year)+'</strong>.</div>'+
-      '<table class="tbl"><thead><tr><th>Member</th><th>Amount</th><th>Status</th><th>Date Paid</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<table class="tbl"><thead><tr>'+
+        '<th style="cursor:pointer;user-select:none" onclick="S.feeSortBy=\'member\';S.feeSortDir=S.feeSortDir===\'asc\'?\'desc\':\'asc\';render()">Member '+(S.feeSortBy==="member"?'<span style="font-size:12px;color:var(--gold)">'+(S.feeSortDir==="asc"?"↑":"↓")+'</span>':'')+' </th>'+
+        '<th style="cursor:pointer;user-select:none" onclick="S.feeSortBy=\'amount\';S.feeSortDir=S.feeSortDir===\'asc\'?\'desc\':\'asc\';render()">Amount '+(S.feeSortBy==="amount"?'<span style="font-size:12px;color:var(--gold)">'+(S.feeSortDir==="asc"?"↑":"↓")+'</span>':'')+' </th>'+
+        '<th style="cursor:pointer;user-select:none" onclick="S.feeSortBy=\'status\';S.feeSortDir=S.feeSortDir===\'asc\'?\'desc\':\'asc\';render()">Status '+(S.feeSortBy==="status"?'<span style="font-size:12px;color:var(--gold)">'+(S.feeSortDir==="asc"?"↑":"↓")+'</span>':'')+' </th>'+
+        '<th style="cursor:pointer;user-select:none" onclick="S.feeSortBy=\'date\';S.feeSortDir=S.feeSortDir===\'asc\'?\'desc\':\'asc\';render()">Date Paid '+(S.feeSortBy==="date"?'<span style="font-size:12px;color:var(--gold)">'+(S.feeSortDir==="asc"?"↑":"↓")+'</span>':'')+' </th>'+
+        '<th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '<div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--gray2);font-size:13px">'+
         '<span style="color:var(--text3)">Total Annual Fees Collected ('+year+')</span>'+
         '<span style="font-weight:700;color:var(--green)">'+fmt(totalCollected)+'</span></div>'+
