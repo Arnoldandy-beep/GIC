@@ -2498,6 +2498,9 @@ function rDashboard(){
           '<div style="display:flex;align-items:flex-end;gap:4px;height:70px">'+bars+'</div></div>'+
         '<div class="card"><div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:600;color:var(--navy)">5-Year Savings Trend</h3><button class="btn btn-g btn-sm" onclick="goPage(\'savings\')">View →</button></div>'+
           '<div style="display:flex;align-items:flex-end;gap:3px;height:70px">'+yearBars+'</div></div>'+
+        '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Active Loans</h3>'+
+          activeLoans.slice(0,5).map(function(ln){var st=loanStat(ln);return'<div style="padding:6px 0;border-bottom:1px solid var(--gray2);cursor:pointer" onclick="goLoanDetail(\''+ln.id+'\')"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:12px;font-weight:600">'+esc(ln.borrower)+'</span><span style="font-size:11px;color:var(--text3)">'+fmt(st.outstanding)+'</span></div><div class="progress-bar"><div class="progress-fill" style="width:'+st.pct+'%;background:'+(st.pct>=100?"var(--green)":st.pct>=60?"var(--gold)":"var(--red)")+'"></div></div></div>';}).join("")||'<div class="no-data">No active loans</div>'+
+        '</div>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:14px">'+
         (def.length?
@@ -2530,11 +2533,8 @@ function rDashboard(){
           notCaughtUp.map(function(m){return'<div style="background:var(--bg);border-radius:6px;padding:5px 10px;font-size:12px;display:flex;align-items:center;gap:6px">'+
             '<span class="mono gold-text">'+m.no+'</span><span>'+esc(m.fullName)+'</span>'+
             '<button class="btn btn-d btn-sm" style="font-size:10px;padding:2px 7px" onclick="openDefaulterNotice(\''+m.id+'\')">📢</button></div>';}).join("")+
-        '</div></div>':"")+'<div class="grid2">'+
-      '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Active Loans</h3>'+
-        activeLoans.slice(0,5).map(function(ln){var st=loanStat(ln);return'<div style="padding:6px 0;border-bottom:1px solid var(--gray2);cursor:pointer" onclick="goLoanDetail(\''+ln.id+'\')"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:12px;font-weight:600">'+esc(ln.borrower)+'</span><span style="font-size:11px;color:var(--text3)">'+fmt(st.outstanding)+'</span></div><div class="progress-bar"><div class="progress-fill" style="width:'+st.pct+'%;background:'+(st.pct>=100?"var(--green)":st.pct>=60?"var(--gold)":"var(--red)")+'"></div></div></div>';}).join("")||'<div class="no-data">No active loans</div>'+
-      '</div>'+
-      '<div class="card"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Club Summary</h3>'+
+        '</div></div>':"")+
+        '<div class="card" style="margin-top:10px"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Club Summary</h3>'+
         [["Current Active Pool (net)",fmt(currentActivePool)],
          ["Total Active Pool (net)",fmt(totalActivePool)],
          ["Gross Active Savings",fmt(totalActivePoolGross)],
@@ -2547,7 +2547,7 @@ function rDashboard(){
          ["Annual Fees Tracked",fmt(totalAnnualFees)],["Approved Expenses",fmt(totalExpenses)],
          ["Loans Portfolio",fmt(S.loans.reduce(function(t,l){return t+l.principal;},0))],
          ["Exited Members",S.members.filter(function(m){return isMemberOffboarded(m);}).length]].map(function(p){return'<div class="kv-row"><span class="kv-label">'+p[0]+'</span><span class="kv-value">'+p[1]+'</span></div>';}).join("")+
-      '</div></div></div>';
+      '</div></div>';
 }
 
 // ─── 18. MEMBERS ───────────────────────────────────
@@ -5564,14 +5564,14 @@ function createSavingsNotification(memberId, savingsData){
 
 function buildLoanRepaymentReminderMessage(loan, stat, lateDays){
   var termMonths=Math.max(1,Number(loan&&loan.months)||1);
-  return "REPAYMENT REMINDER NOTICE\n"+
-    "Loan Ref: "+(loan.no||"N/A")+"\n"+
-    "Outstanding Balance: "+fmt(stat.outstanding)+"\n"+
-    "Original Loan Period: "+termMonths+" month(s)\n"+
-    "Days Past Due: "+lateDays+" day(s)\n"+
+  return "FORMAL REPAYMENT NOTICE\n"+
+    "Loan Reference: "+(loan.no||"N/A")+"\n"+
+    "Amount Owed (Outstanding Balance): "+fmt(stat.outstanding)+"\n"+
+    "Initial Loan Period Requested (Months): "+termMonths+"\n"+
+    "Overdue Duration (Days Late): "+lateDays+"\n"+
     "Penalty Interest Accrued: "+fmt(stat.penaltyInterest)+"\n\n"+
-    "This serves as a formal notice that your loan account is in arrears. "+
-    "Please regularize your account immediately to avoid further penalty interest accrual and recovery action under club lending policy.";
+    "This is a formal demand for repayment under the lending terms and conditions of the club. "+
+    "You are required to settle the outstanding balance immediately. Continued default may result in additional charges, recovery action, and administrative sanctions in line with approved lending standards.";
 }
 
 function sendOverdueLoanReminders(){
