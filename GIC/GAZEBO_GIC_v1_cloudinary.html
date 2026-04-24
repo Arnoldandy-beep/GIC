@@ -186,17 +186,15 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
 
 function buildLoanWhatsAppMessage(loan, stat, lateDays){
   var termMonths=Math.max(1,Number(loan&&loan.months)||1);
-  var msg="🔔 *URGENT: LOAN REPAYMENT REMINDER*\n\n";
-  msg+="Hi "+loan.borrower+",\n\n";
-  msg+="⚠️ Your loan (*"+loan.no+"*) is *OVERDUE* by *"+lateDays+" day(s)*.\n\n";
-  msg+="📋 *Loan Details:*\n";
-  msg+="• Outstanding Balance: "+fmt(stat.outstanding)+"\n";
-  msg+="• Original Period: "+termMonths+" month(s)\n";
-  msg+="• Days Overdue: "+lateDays+" day(s)\n";
-  msg+="• Penalty Interest: "+fmt(stat.penaltyInterest)+"\n\n";
-  msg+="⬆️ *Please settle this amount immediately to prevent further charges.*\n";
-  msg+="📞 Contact your Treasurer or Admin for payment arrangements.\n\n";
-  msg+="Thank you.";
+  var msg="FORMAL REPAYMENT NOTICE\n\n";
+  msg+="Borrower: "+(loan.borrower||"Member")+"\n";
+  msg+="Loan Reference: "+(loan.no||"N/A")+"\n";
+  msg+="Amount Owed (Outstanding Balance): "+fmt(stat.outstanding)+"\n";
+  msg+="Initial Loan Period Requested (Months): "+termMonths+"\n";
+  msg+="Overdue Duration (Days Late): "+lateDays+"\n";
+  msg+="Penalty Interest Accrued: "+fmt(stat.penaltyInterest)+"\n\n";
+  msg+="This is a formal demand for repayment under the lending terms and conditions of the club. " +
+      "You are required to settle the outstanding balance immediately. Continued default may result in additional charges, recovery action, and administrative sanctions in line with approved lending standards.";
   return msg;
 }
 @media (max-width:380px){
@@ -2447,7 +2445,7 @@ function rDashboard(){
       '<td>'+Number(ln.months||0)+' month(s)</td>'+
       '<td><span class="bdg bdg-danger">'+lateDays+' day(s)</span></td>'+
       '<td>'+(st.penaltyInterest>0?'<span class="red-text" style="font-weight:700">'+fmt(st.penaltyInterest)+'</span>':'—')+'</td>'+
-      '<td>'+(mid?'<button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="sendLoanDefaulterNotice(\''+ln.id+'\')">📢 Notice</button>':'<span class="bdg bdg-gray">No member link</span>')+'</td></tr>';
+      '<td>'+(mid?'<button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="sendLoanDefaulterWhatsAppNotice(\''+ln.id+'\')">📢 Notice</button>':'<span class="bdg bdg-gray">No member link</span>')+'</td></tr>';
   }).join("");
 
   // Members with accruing penalties
@@ -2503,12 +2501,15 @@ function rDashboard(){
         '</div>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:14px">'+
-        '<div class="card" style="border:2px solid var(--orange);height:fit-content">'+
-          '<div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--orange)">💰 Current Month Defaulters ('+def.length+')</h3></div>'+
-          (def.length
-            ?'<table class="tbl tbl-sm"><thead><tr><th>No.</th><th>Member</th><th>Phone</th><th>Arrears</th><th>Status</th><th></th></tr></thead><tbody>'+defRows+'</tbody></table>'
-            :'<div style="font-size:12px;color:var(--text3);text-align:center;padding:6px 0">No current month defaulters for '+MS[n.getMonth()]+' '+n.getFullYear()+'.</div>')+
-        '</div>'+
+        (def.length?
+          '<div class="card" style="border:2px solid var(--orange);height:fit-content">'+
+            '<div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--orange)">💰 Current Month Defaulters ('+def.length+')</h3></div>'+
+            '<table class="tbl tbl-sm"><thead><tr><th>No.</th><th>Member</th><th>Phone</th><th>Arrears</th><th>Status</th><th></th></tr></thead><tbody>'+defRows+'</tbody></table>'+
+          '</div>':'<div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;border:2px solid var(--green);background:linear-gradient(135deg,var(--green)10%,#f0f9f0)">'+
+            '<div style="font-size:48px;margin-bottom:12px">✅</div>'+
+            '<div style="font-size:16px;font-weight:700;color:var(--green);margin-bottom:4px">All Members Paid This Month!</div>'+
+            '<div style="font-size:12px;color:var(--text3);text-align:center">No defaulters detected for '+MS[n.getMonth()]+' '+n.getFullYear()+'</div>'+
+          '</div>')+
         '<div class="card" style="border:2px solid var(--red);height:fit-content">'+
           '<div class="fl" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:13px;font-weight:700;color:var(--red)">🔴 Overdue Loan Defaulters ('+overdueLoans.length+')</h3></div>'+
           (overdueLoans.length
@@ -5146,6 +5147,22 @@ function sendLoanDefaulterNotice(loanId){
   DB.set(K.notifications,S.notifications);
   logEvent("LOAN",S.user?S.user.name:"System","Loan overdue notice sent for "+(loan.no||"N/A")+" to "+(member.fullName||loan.borrower||"member"));
   showToast("Loan overdue notice sent for "+(loan.no||"loan"),"ok");
+}
+function sendLoanDefaulterWhatsAppNotice(loanId){
+  if(!canSendLoanRepaymentReminder(S.user)){showToast("Only IT Admin, Treasurer, Chairman, or Secretary can send reminders","err");return;}
+  var loan=S.loans.filter(function(l){return l.id===loanId;})[0];
+  if(!loan||loan.status!=="Active"||!isOverdue(loan)){showToast("Selected loan is not an active overdue loan","warn");return;}
+  var member=loan.memberId?S.members.filter(function(m){return m.id===loan.memberId;})[0]:resolveMemberFromLoanRef(loan.memberNo||loan.borrower);
+  if(!member){showToast("No linked member found for this loan","err");return;}
+  var phone=String(member.phone||"").replace(/^0/,"256").replace(/[^0-9]/g,"");
+  if(!phone){showToast("Member phone number missing","err");return;}
+  var st=loanStat(loan);
+  var lateDays=getLoanLateDays(loan);
+  var msg=buildLoanWhatsAppMessage(loan,st,lateDays);
+  var waUrl="https://wa.me/"+phone+"?text="+encodeURIComponent(msg);
+  logEvent("LOAN",S.user?S.user.name:"System","WhatsApp overdue notice opened for "+(loan.no||"N/A")+" to "+(member.fullName||loan.borrower||"member"));
+  window.open(waUrl,"_blank");
+  showToast("WhatsApp notice opened for "+(loan.no||"loan"),"ok");
 }
 function triggerUpload(id){var el=document.getElementById(id);if(el)el.click();}
 async function handlePhoto(input,prevId,hidId){
