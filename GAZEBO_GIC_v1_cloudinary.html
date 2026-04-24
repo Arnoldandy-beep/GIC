@@ -183,20 +183,6 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
   .mobile-stack .tbl td{display:flex;justify-content:space-between;border:none;padding:4px 0;font-size:12px}
   .mobile-stack .tbl td::before{content:attr(data-label);color:var(--text3);font-size:11px;font-weight:600;text-transform:uppercase;flex-shrink:0;margin-right:8px}
 }
-
-function buildLoanWhatsAppMessage(loan, stat, lateDays){
-  var termMonths=Math.max(1,Number(loan&&loan.months)||1);
-  var msg="FORMAL REPAYMENT NOTICE\n\n";
-  msg+="Borrower: "+(loan.borrower||"Member")+"\n";
-  msg+="Loan Reference: "+(loan.no||"N/A")+"\n";
-  msg+="Amount Owed (Outstanding Balance): "+fmt(stat.outstanding)+"\n";
-  msg+="Initial Loan Period Requested (Months): "+termMonths+"\n";
-  msg+="Overdue Duration (Days Late): "+lateDays+"\n";
-  msg+="Penalty Interest Accrued: "+fmt(stat.penaltyInterest)+"\n\n";
-  msg+="This is a formal demand for repayment under the lending terms and conditions of the club. " +
-      "You are required to settle the outstanding balance immediately. Continued default may result in additional charges, recovery action, and administrative sanctions in line with approved lending standards.";
-  return msg;
-}
 @media (max-width:380px){
   .fg3{grid-template-columns:1fr!important}
   .pin-digit{width:46px;height:54px;font-size:20px}
@@ -5611,6 +5597,20 @@ function createSavingsNotification(memberId, savingsData){
   S.notifications=S.notifications.concat([notif]);
   DB.set(K.notifications,S.notifications);
   return notif;
+}
+
+function buildLoanWhatsAppMessage(loan, stat, lateDays){
+  var termMonths=Math.max(1,Number(loan&&loan.months)||1);
+  var msg="FORMAL REPAYMENT NOTICE\n\n";
+  msg+="Borrower: "+(loan.borrower||"Member")+"\n";
+  msg+="Loan Reference: "+(loan.no||"N/A")+"\n";
+  msg+="Amount Owed (Outstanding Balance): "+fmt(stat.outstanding)+"\n";
+  msg+="Initial Loan Period Requested (Months): "+termMonths+"\n";
+  msg+="Overdue Duration (Days Late): "+lateDays+"\n";
+  msg+="Penalty Interest Accrued: "+fmt(stat.penaltyInterest)+"\n\n";
+  msg+="This is a formal demand for repayment under the lending terms and conditions of the club. "+
+      "You are required to settle the outstanding balance immediately. Continued default may result in additional charges, recovery action, and administrative sanctions in line with approved lending standards.";
+  return msg;
 }
 
 function buildLoanRepaymentReminderMessage(loan, stat, lateDays){
