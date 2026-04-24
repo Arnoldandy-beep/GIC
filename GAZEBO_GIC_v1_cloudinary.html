@@ -184,6 +184,21 @@ table.savings-cal td{padding:5px 8px;border:1px solid var(--gray2);text-align:ce
   .mobile-stack .tbl td::before{content:attr(data-label);color:var(--text3);font-size:11px;font-weight:600;text-transform:uppercase;flex-shrink:0;margin-right:8px}
 }
 
+function buildLoanWhatsAppMessage(loan, stat, lateDays){
+  var termMonths=Math.max(1,Number(loan&&loan.months)||1);
+  var msg="🔔 *URGENT: LOAN REPAYMENT REMINDER*\n\n";
+  msg+="Hi "+loan.borrower+",\n\n";
+  msg+="⚠️ Your loan (*"+loan.no+"*) is *OVERDUE* by *"+lateDays+" day(s)*.\n\n";
+  msg+="📋 *Loan Details:*\n";
+  msg+="• Outstanding Balance: "+fmt(stat.outstanding)+"\n";
+  msg+="• Original Period: "+termMonths+" month(s)\n";
+  msg+="• Days Overdue: "+lateDays+" day(s)\n";
+  msg+="• Penalty Interest: "+fmt(stat.penaltyInterest)+"\n\n";
+  msg+="⬆️ *Please settle this amount immediately to prevent further charges.*\n";
+  msg+="📞 Contact your Treasurer or Admin for payment arrangements.\n\n";
+  msg+="Thank you.";
+  return msg;
+}
 @media (max-width:380px){
   .fg3{grid-template-columns:1fr!important}
   .pin-digit{width:46px;height:54px;font-size:20px}
@@ -1291,7 +1306,7 @@ function canManageLoanRecords(user){
   return !!(user&&(user.access==="full"||user.access==="treasurer"));
 }
 function canSendLoanRepaymentReminder(user){
-  return !!(user&&(user.access==="full"||user.access==="treasurer"||user.access==="chairman"));
+  return !!(user&&(user.access==="full"||user.access==="treasurer"||user.access==="chairman"||user.access==="secretary"));
 }
 function canManageMinutesRecords(){
   return !!(S.user&&(S.user.access==="full"||S.user.access==="secretary"));
@@ -3185,7 +3200,8 @@ function rLoanList(){
     '<div style="display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;margin:6px 0 10px 0">'+
       '<button class="btn btn-g btn-sm" onclick="activateOverdueLoanSort()">Overdue Loans First</button>'+
       '<button class="btn btn-g btn-sm" onclick="S.loanMetricFilter=\'all\';render()">Clear Loan Filter</button>'+
-      (isOverdueMode&&canSendReminders?'<button class="btn btn-d btn-sm" onclick="sendOverdueLoanReminders()">Send Repayment Reminders ('+overdueInView.length+')</button>':'')+
+      (isOverdueMode&&canSendReminders?'<button class="btn btn-d btn-sm" onclick="sendOverdueLoanReminders()">Send Reminders ('+overdueInView.length+')</button>':'')+
+      (isOverdueMode&&canSendReminders?'<button class="btn btn-p btn-sm" onclick="sendOverdueLoanWhatsAppReminders()">📱 WhatsApp Reminders ('+overdueInView.length+')</button>':'')+
     '</div>'+
     '<div class="mobile-stack"><table class="tbl"><thead><tr><th>'+sortBtn("no","No.")+'</th><th>'+sortBtn("borrower","Borrower")+'</th><th>'+sortBtn("principal","Principal")+'</th><th>'+sortBtn("interest","Interest")+'</th><th>'+sortBtn("rate","Rate")+'</th><th>'+sortBtn("due","Due Date")+'</th><th>'+sortBtn("outstanding","Outstanding")+'</th><th>'+sortBtn("status","Status")+'</th>'+(showActions?'<th>Actions</th>':'')+'</tr></thead>'+
     '<tbody>'+(rows||'<tr><td colspan="'+(showActions?9:8)+'" class="no-data">No loans in this category</td></tr>')+'</tbody></table></div></div></div>';
@@ -3895,7 +3911,7 @@ function rModalContent(){
     "calc-interest":mCalcInterest,"offboard":mOffboard,"add-user":mAddUser,"edit-user":mEditUser,
     "decline-loan":mDeclineLoan,"edit-loan":mEditLoan,"amend-savings":mAmendSavings,"add-expense":mAddExpense,"add-operational-income":mAddOperationalIncome,
     "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment,
-    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans,"member-data-audit":mMemberDataAudit,"add-minute":mAddMinute};
+    "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans,"member-data-audit":mMemberDataAudit,"add-minute":mAddMinute,"whatsapp-reminders":mWhatsAppReminders};
   return(map[m.id]||function(){return"";})();
 }
 
@@ -3921,6 +3937,33 @@ function mAddMinute(){
       (attRows?'<div style="margin-top:10px"><div class="sec-hdr" style="margin-top:0">Existing Attachments</div>'+attRows+'</div>':'')+
     '</div>'+
     mfoot('<button class="btn btn-g" onclick="closeModal()">Cancel</button>','<button class="btn btn-p" onclick="saveMinuteRecord()">'+(rec?'💾 Save Changes':'📤 Publish Minutes')+'</button>');
+}
+
+function mWhatsAppReminders(){
+  var overdueLoans=S.modal.data||[];
+  var rows=overdueLoans.map(function(loan){
+    var member=loan.memberId?S.members.filter(function(m){return m.id===loan.memberId;})[0]:resolveMemberFromLoanRef(loan.memberNo||loan.borrower);
+    var st=loanStat(loan);
+    var lateDays=getLoanLateDays(loan);
+    var msg=buildLoanWhatsAppMessage(loan,st,lateDays);
+    var encodedMsg=encodeURIComponent(msg);
+    var whatsappLink="https://wa.me/?text="+encodedMsg;
+    var memberPhone=member?member.phone:"";
+    var contactLink=memberPhone?"https://wa.me/"+memberPhone.replace(/\\D/g,"")+"/":"javascript:alert('No phone number on file')";
+    return'<div class="card" style="margin-bottom:12px"><div style="margin-bottom:8px"><div style="font-weight:600;color:var(--navy)">'+esc(loan.borrower)+' ('+loan.no+')</div><div style="font-size:11px;color:var(--text3)">Amount Owed: '+fmt(st.outstanding)+' | Days Overdue: '+lateDays+'</div></div>'+
+      '<div style="background:#f5f5f5;border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px;font-family:monospace;line-height:1.5;max-height:200px;overflow:auto;border-left:3px solid var(--green)">'+msg.replace(/\\n/g,"<br>")+'</div>'+
+      '<div class="fl" style="gap:6px">'+
+        '<a href="'+contactLink+'" target="_blank" class="btn btn-g btn-sm" '+(memberPhone?"":" disabled")+'>📱 Send to Contact</a>'+
+        '<button class="btn btn-b btn-sm" onclick="navigator.clipboard.writeText('+jsq(msg)+');showToast(\'Message copied to clipboard\',\'ok\')">📋 Copy Message</button>'+
+        '<a href="'+whatsappLink+'" target="_blank" class="btn btn-p btn-sm">💬 WhatsApp (Manual)</a>'+
+      '</div></div>';
+  }).join("");
+  return mhdr("WhatsApp Repayment Reminders (+"+overdueLoans.length+")")+
+    '<div class="mbody">'+
+      '<div class="alert alert-info" style="font-size:12px"><strong>Instructions:</strong><br>1. Click <em>📱 Send to Contact</em> to open WhatsApp chat with the borrower (requires phone number on file)<br>2. Or click <em>📋 Copy Message</em> to copy the formatted message and send manually<br>3. Message includes details on outstanding balance, overdue days, and penalties</div>'+
+      rows+
+    '</div>'+
+    mfoot('<button class="btn btn-p" onclick="logEvent(\'LOAN\',S.user?S.user.name:\'System\',\'Generated WhatsApp reminders for \'+'+overdueLoans.length+'+\' overdue loans\');closeModal();showToast(\'WhatsApp reminders sent/copied\',\'ok\')">✅ Done</button>');
 }
 
 function mSelfPasswordReset(){
@@ -5510,7 +5553,7 @@ function buildLoanRepaymentReminderMessage(loan, stat, lateDays){
 }
 
 function sendOverdueLoanReminders(){
-  if(!canSendLoanRepaymentReminder(S.user)){showToast("Only IT Admin, Treasurer, or Chairman can send reminders","err");return;}
+  if(!canSendLoanRepaymentReminder(S.user)){showToast("Only IT Admin, Treasurer, Chairman, or Secretary can send reminders","err");return;}
   var overdueLoans=S.loans.filter(function(l){return l.status==="Active"&&isOverdue(l);});
   if(!overdueLoans.length){showToast("No overdue loans found","warn");return;}
   if(!confirm("Send formal repayment reminders to "+overdueLoans.length+" defaulter(s)?")){return;}
@@ -5550,6 +5593,16 @@ function sendOverdueLoanReminders(){
   DB.set(K.notifications,S.notifications);
   logEvent("LOAN",S.user?S.user.name:"System","Sent "+notificationsToAdd.length+" repayment reminder(s) to overdue defaulters");
   showToast("Repayment reminders sent: "+notificationsToAdd.length+(skipped?" ("+skipped+" skipped)":""),"ok");
+}
+
+function sendOverdueLoanWhatsAppReminders(){
+  if(!canSendLoanRepaymentReminder(S.user)){showToast("Only IT Admin, Treasurer, Chairman, or Secretary can send WhatsApp reminders","err");return;}
+  var overdueLoans=S.loans.filter(function(l){return l.status==="Active"&&isOverdue(l);});
+  if(!overdueLoans.length){showToast("No overdue loans found","warn");return;}
+  if(!confirm("Generate WhatsApp reminder links for "+overdueLoans.length+" overdue loan(s)? Links will be displayed for manual sending.")){return;}
+  
+  S.modal={id:"whatsapp-reminders",data:overdueLoans};
+  render();
 }
 
 function getNextSavingsDueDate(){
