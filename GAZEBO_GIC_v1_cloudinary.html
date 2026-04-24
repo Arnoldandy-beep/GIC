@@ -2431,7 +2431,7 @@ function rDashboard(){
       '<td>'+Number(ln.months||0)+' month(s)</td>'+
       '<td><span class="bdg bdg-danger">'+lateDays+' day(s)</span></td>'+
       '<td>'+(st.penaltyInterest>0?'<span class="red-text" style="font-weight:700">'+fmt(st.penaltyInterest)+'</span>':'—')+'</td>'+
-      '<td>'+(mid?'<button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="sendLoanDefaulterWhatsAppNotice(\''+ln.id+'\')">📢 Notice</button>':'<span class="bdg bdg-gray">No member link</span>')+'</td></tr>';
+        '<td>'+(mid?'<button class="btn btn-d btn-sm" style="font-size:10px;padding:3px 8px" onclick="openLoanDefaulterNotice(\''+ln.id+'\')">📢 Notice</button>':'<span class="bdg bdg-gray">No member link</span>')+'</td></tr>';
   }).join("");
 
   // Members with accruing penalties
@@ -3920,7 +3920,7 @@ function rModalContent(){
   var map={"add-savings":mAddSavings,"new-loan":mNewLoan,"add-repayment":mAddRepayment,
     "calc-interest":mCalcInterest,"offboard":mOffboard,"add-user":mAddUser,"edit-user":mEditUser,
     "decline-loan":mDeclineLoan,"edit-loan":mEditLoan,"amend-savings":mAmendSavings,"add-expense":mAddExpense,"add-operational-income":mAddOperationalIncome,
-    "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment,
+    "setup-totp":mSetupTOTP,"defaulter-notice":mDefaulterNotice,"loan-defaulter-notice":mLoanDefaulterNotice,"reconcile":mReconcile,"issue-fine":mIssueFine,"self-password-reset":mSelfPasswordReset,"self-mfa-reset":mSelfMFAReset,"view-attachment":mViewAttachment,
     "edit-expense":mEditExpense,"edit-annual-fee":mEditAnnualFee,"edit-fine":mEditFine,"restore-loans":mRestoreLoans,"member-data-audit":mMemberDataAudit,"add-minute":mAddMinute,"whatsapp-reminders":mWhatsAppReminders};
   return(map[m.id]||function(){return"";})();
 }
@@ -4318,6 +4318,43 @@ function mDefaulterNotice(){
         '<a href="https://wa.me/256'+m.phone.replace(/^0/,"").replace(/[^0-9]/g,"")+'?text="+encodeURIComponent(document.getElementById(\'notice-text\')?document.getElementById(\'notice-text\').value:\'\')+"" '+
         'class="btn btn-grn" target="_blank" onclick="return noticeWhatsApp(\''+m.id+'\')">📱 WhatsApp Message</a>'+
         '<button class="btn btn-g" onclick="logEvent(\'MEMBER\',S.user.name,\'Notice sent to '+esc(m.fullName)+'\');showToast(\'Notice logged\');closeModal()">📋 Log as Sent</button>'+
+      '</div>'+
+    '</div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Close</button>');
+}
+
+function mLoanDefaulterNotice(){
+  var loanId=S.modal&&S.modal.data;
+  var loan=S.loans.filter(function(x){return x.id===loanId;})[0];
+  if(!loan)return"";
+  var st=loanStat(loan);
+  var lateDays=getLoanLateDays(loan);
+  var member=loan.memberId?S.members.filter(function(m){return m.id===loan.memberId;})[0]:resolveMemberFromLoanRef(loan.memberNo||loan.borrower);
+  var borrowerName=(member&&member.fullName)||loan.borrower||"Member";
+  var termMonths=Math.max(1,Number(loan&&loan.months)||1);
+  var msg=buildLoanWhatsAppMessage(loan,st,lateDays);
+
+  return mhdr("Overdue Loan Notice — "+esc(borrowerName))+
+    '<div class="mbody">'+
+      '<div class="alert alert-err" style="font-size:13px">'+
+        '🔴 <strong>Overdue Loan</strong>: This loan has passed its expected repayment period and requires immediate follow-up.'+
+      '</div>'+
+      '<table class="tbl tbl-sm"><thead><tr><th>Loan Ref</th><th>Borrower</th><th>Amount Owed</th><th>Initial Period</th><th>Overdue Duration</th><th>Penalty Interest</th></tr></thead><tbody>'+
+        '<tr><td class="mono gold-text" style="font-weight:700">'+esc(loan.no||"N/A")+'</td>'+
+        '<td style="font-weight:600">'+esc(borrowerName)+'</td>'+
+        '<td class="red-text" style="font-weight:700">'+fmt(st.outstanding)+'</td>'+
+        '<td>'+termMonths+' month(s)</td>'+
+        '<td><span class="bdg bdg-danger">'+lateDays+' day(s)</span></td>'+
+        '<td class="red-text" style="font-weight:700">'+fmt(st.penaltyInterest)+'</td></tr>'+
+      '</tbody></table>'+
+      '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13px;font-weight:700;border-top:2px solid var(--gray2);margin-top:8px">'+
+        '<span>Total Outstanding (incl. penalty)</span><span class="red-text">'+fmt(st.outstanding+st.penaltyInterest)+'</span></div>'+
+      '<div class="fg" style="margin-top:12px">'+
+        '<div class="full"><label class="form-label">Send Notice to Borrower (via WhatsApp/SMS text)</label>'+
+          '<textarea class="inp" id="loan-notice-text" rows="6">'+esc(msg)+'</textarea></div>'+
+      '</div>'+
+      '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+
+        '<a href="#" class="btn btn-grn" onclick="return noticeLoanWhatsApp(\''+loan.id+'\')">📱 WhatsApp Message</a>'+
+        '<button class="btn btn-g" onclick="logLoanNoticeAsSent(\''+loan.id+'\')">📋 Log as Sent</button>'+
       '</div>'+
     '</div>'+mfoot('<button class="btn btn-g" onclick="closeModal()">Close</button>');
 }
@@ -5037,6 +5074,28 @@ function noticeWhatsApp(mid){
   return false;
 }
 
+function noticeLoanWhatsApp(loanId){
+  if(!canSendLoanRepaymentReminder(S.user)){showToast("Only IT Admin, Treasurer, Chairman, or Secretary can send reminders","err");return false;}
+  var loan=S.loans.filter(function(l){return l.id===loanId;})[0];
+  if(!loan||loan.status!=="Active"||!isOverdue(loan)){showToast("Selected loan is not an active overdue loan","warn");return false;}
+  var member=loan.memberId?S.members.filter(function(m){return m.id===loan.memberId;})[0]:resolveMemberFromLoanRef(loan.memberNo||loan.borrower);
+  if(!member){showToast("No linked member found for this loan","err");return false;}
+  var phone=String(member.phone||"").replace(/^0/,"256").replace(/[^0-9]/g,"");
+  if(!phone){showToast("Member phone number missing","err");return false;}
+  var text=(document.getElementById("loan-notice-text")||{value:""}).value||buildLoanWhatsAppMessage(loan,loanStat(loan),getLoanLateDays(loan));
+  logEvent("LOAN",S.user?S.user.name:"System","WhatsApp overdue notice sent for "+(loan.no||"N/A")+" to "+((member&&member.fullName)||loan.borrower||"member"));
+  window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(text),"_blank");
+  return false;
+}
+
+function logLoanNoticeAsSent(loanId){
+  var loan=S.loans.filter(function(l){return l.id===loanId;})[0];
+  if(!loan){showToast("Loan record not found","err");return;}
+  logEvent("LOAN",S.user?S.user.name:"System","Loan overdue notice logged as sent for "+(loan.no||"N/A")+" to "+(loan.borrower||"member"));
+  showToast("Loan overdue notice logged","ok");
+  closeModal();
+}
+
 function sendMemberStatementWA(mid){
   var m=S.members.filter(function(x){return x.id===mid;})[0];if(!m){showToast("Member not found","err");return;}
   var sav=memberTotalSavings(m.id),lk=memberLockedSavings(m.id),av=Math.max(0,sav-lk);
@@ -5105,6 +5164,7 @@ function shareMinuteWhatsApp(mid){
   showToast("Minutes share opened on WhatsApp","ok");
 }
 function openDefaulterNotice(mid){S.modal={id:"defaulter-notice",data:mid};render();}
+function openLoanDefaulterNotice(loanId){S.modal={id:"loan-defaulter-notice",data:loanId};render();}
 function sendLoanDefaulterNotice(loanId){
   if(!canSendLoanRepaymentReminder(S.user)){showToast("Only IT Admin, Treasurer, Chairman, or Secretary can send reminders","err");return;}
   var loan=S.loans.filter(function(l){return l.id===loanId;})[0];
