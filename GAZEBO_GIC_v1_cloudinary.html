@@ -1290,6 +1290,9 @@ function canUserApproveLoan(loan,user){
 function canManageLoanRecords(user){
   return !!(user&&(user.access==="full"||user.access==="treasurer"));
 }
+function canSendLoanRepaymentReminder(user){
+  return !!(user&&(user.access==="full"||user.access==="treasurer"||user.access==="chairman"));
+}
 function canManageMinutesRecords(){
   return !!(S.user&&(S.user.access==="full"||S.user.access==="secretary"));
 }
@@ -3050,6 +3053,7 @@ function rLoanList(){
   var interestCleared=clearedStats.reduce(function(t,x){return t+x.st.paidInterest;},0);
   var principalPending=pendingOrActiveStats.reduce(function(t,x){return t+x.st.outstandingPrincipal;},0);
   var principalCleared=clearedStats.reduce(function(t,x){return t+x.st.paidPrincipal;},0);
+  var canSendReminders=canSendLoanRepaymentReminder(S.user);
 
   var statusRank={"Pending":1,"Active":2,"Cleared":3,"Declined":4};
   function sortVal(loan,key){
@@ -3062,6 +3066,7 @@ function rLoanList(){
     if(key==="due")return String(loanDueDate(loan,loan.months)||"");
     if(key==="outstanding")return Number(st.outstanding||0);
     if(key==="status")return Number(statusRank[loan.status]||99);
+    if(key==="overdue")return loan.status==="Active"?Number(getLoanLateDays(loan)||0):-1;
     return String(loan.no||"");
   }
   function cmp(a,b,key){
@@ -3092,6 +3097,8 @@ function rLoanList(){
       (showActions?'<td data-label="Actions">'+(canUserApproveLoan(loan,S.user)?'<div class="fl"><button class="btn btn-grn btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();approveLoan(\''+loan.id+'\')">✅ Approve</button><button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button></div>':loan.status==="Pending"&&hasUserApprovedLoan(loan,S.user&&S.user.id)?'<span class="bdg bdg-success">Approved</span>':loan.status==="Pending"?'<button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="event.stopPropagation();goLoanDetail(\''+loan.id+'\')">Open</button>':"—")+'</td>':"")+
       '</tr>';
   }).join("");
+  var overdueInView=sortedFiltered.filter(function(l){return l.status==="Active"&&isOverdue(l);});
+  var isOverdueMode=(metric==="overdue")||((S.loanSortBy||"")==="overdue");
   function sortArrow(key){
     if((S.loanSortBy||"")!==key)return "";
     return (S.loanSortDir||"asc")==="desc"?" ▼":" ▲";
@@ -3151,7 +3158,11 @@ function rLoanList(){
       '<button type="button" class="stat-card" style="cursor:pointer;text-align:left;width:100%;'+(metric==="principal-cleared"?'outline:2px solid var(--green);':'')+'" onclick="S.loanMetricFilter=\'principal-cleared\';render()"><div class="stat-icon" style="background:#057A551A">💵</div><div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Principal Cleared</div><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(principalCleared)+'</div></div></button>'+
     '</div>'+
     '<div class="tab-bar">'+[["active","Active"],["pending","Pending"],["cleared","Cleared"],["declined","Declined"],["all","All"]].map(function(t){return'<button class="tab-btn'+(S.loanTab===t[0]?" active":"")+'" onclick="S.loanTab=\''+t[0]+'\';S.loanMetricFilter=\'all\';render()">'+t[1]+'</button>';}).join("")+'</div>'+
-    '<div style="display:flex;justify-content:flex-end;margin:6px 0 10px 0"><button class="btn btn-g btn-sm" onclick="S.loanMetricFilter=\'all\';render()">Clear Loan Filter</button></div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;margin:6px 0 10px 0">'+
+      '<button class="btn btn-g btn-sm" onclick="activateOverdueLoanSort()">Overdue Loans First</button>'+
+      '<button class="btn btn-g btn-sm" onclick="S.loanMetricFilter=\'all\';render()">Clear Loan Filter</button>'+
+      (isOverdueMode&&canSendReminders?'<button class="btn btn-d btn-sm" onclick="sendOverdueLoanReminders()">Send Repayment Reminders ('+overdueInView.length+')</button>':'')+
+    '</div>'+
     '<div class="mobile-stack"><table class="tbl"><thead><tr><th>'+sortBtn("no","No.")+'</th><th>'+sortBtn("borrower","Borrower")+'</th><th>'+sortBtn("principal","Principal")+'</th><th>'+sortBtn("interest","Interest")+'</th><th>'+sortBtn("rate","Rate")+'</th><th>'+sortBtn("due","Due Date")+'</th><th>'+sortBtn("outstanding","Outstanding")+'</th><th>'+sortBtn("status","Status")+'</th>'+(showActions?'<th>Actions</th>':'')+'</tr></thead>'+
     '<tbody>'+(rows||'<tr><td colspan="'+(showActions?9:8)+'" class="no-data">No loans in this category</td></tr>')+'</tbody></table></div></div></div>';
 }
@@ -3506,6 +3517,23 @@ function rMemberNotifications(memberId){
 
   var recent=notifs.slice(-2).reverse();
   return recent.map(function(n){
+    if(n.type==="loan_repayment_reminder"){
+      return'<div class="card" style="border-left:4px solid var(--red);background:#FDE8E8;margin-bottom:12px;overflow:hidden">'+
+        '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px">'+
+          '<div><div style="font-weight:700;color:var(--red);font-size:14px">Loan Repayment Reminder</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+esc(n.loanNo||"Loan")+' · '+fmt(n.amountOutstanding||0)+' outstanding</div></div>'+
+          '<button onclick="dismissNotification(\''+n.id+'\')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:18px;padding:0;margin:-4px 0 0 0">✕</button>'+
+        '</div>'+
+        '<div style="font-size:12px;color:var(--text);line-height:1.5;background:white;border:1px solid #FECACA;border-radius:6px;padding:10px">'+
+          '<div><strong>Amount Owed:</strong> '+fmt(n.amountOutstanding||0)+'</div>'+
+          '<div><strong>Initial Loan Period:</strong> '+(n.loanPeriodMonths||0)+' month(s)</div>'+
+          '<div><strong>Overdue Duration:</strong> '+(n.overdueDays||0)+' day(s)</div>'+
+          '<div><strong>Penalty Interest:</strong> '+fmt(n.penaltyInterest||0)+'</div>'+
+          '<div style="margin-top:8px;color:var(--text2)">'+esc(n.details||"").replace(/\n/g,"<br>")+'</div>'+
+        '</div>'+
+        '<button onclick="dismissAllNotificationsForMember(\''+memberId+'\')" style="width:100%;padding:8px;background:#FECACA;border:1px solid #FCA5A5;border-radius:4px;cursor:pointer;font-size:12px;color:#7F1D1D;font-weight:600;margin-top:8px">Dismiss</button>'+
+      '</div>';
+    }
+
     var smartDetails=n.smartDetails||{};
     var fullMonths=[];
     var partialMonths=[];
@@ -4798,6 +4826,12 @@ function setLoanSort(key){
   }
   render();
 }
+function activateOverdueLoanSort(){
+  S.loanMetricFilter="overdue";
+  S.loanSortBy="overdue";
+  S.loanSortDir="desc";
+  render();
+}
 function editMember(id){clearMemberFormUploadDraft();pushNav();S.editId=id;S.page="members";S.view="edit-member";render();}
 function cancelForm(){goBack();}
 function closeModal(){
@@ -5434,6 +5468,61 @@ function createSavingsNotification(memberId, savingsData){
   S.notifications=S.notifications.concat([notif]);
   DB.set(K.notifications,S.notifications);
   return notif;
+}
+
+function buildLoanRepaymentReminderMessage(loan, stat, lateDays){
+  var termMonths=Math.max(1,Number(loan&&loan.months)||1);
+  return "REPAYMENT REMINDER NOTICE\n"+
+    "Loan Ref: "+(loan.no||"N/A")+"\n"+
+    "Outstanding Balance: "+fmt(stat.outstanding)+"\n"+
+    "Original Loan Period: "+termMonths+" month(s)\n"+
+    "Days Past Due: "+lateDays+" day(s)\n"+
+    "Penalty Interest Accrued: "+fmt(stat.penaltyInterest)+"\n\n"+
+    "This serves as a formal notice that your loan account is in arrears. "+
+    "Please regularize your account immediately to avoid further penalty interest accrual and recovery action under club lending policy.";
+}
+
+function sendOverdueLoanReminders(){
+  if(!canSendLoanRepaymentReminder(S.user)){showToast("Only IT Admin, Treasurer, or Chairman can send reminders","err");return;}
+  var overdueLoans=S.loans.filter(function(l){return l.status==="Active"&&isOverdue(l);});
+  if(!overdueLoans.length){showToast("No overdue loans found","warn");return;}
+  if(!confirm("Send formal repayment reminders to "+overdueLoans.length+" defaulter(s)?")){return;}
+
+  var today=todayStr();
+  var notificationsToAdd=[];
+  var skipped=0;
+  overdueLoans.forEach(function(loan){
+    var member=loan.memberId?S.members.filter(function(m){return m.id===loan.memberId;})[0]:resolveMemberFromLoanRef(loan.memberNo||loan.borrower);
+    if(!member){skipped++;return;}
+    var alreadySentToday=S.notifications.some(function(n){
+      return n.type==="loan_repayment_reminder"&&n.loanId===loan.id&&n.memberId===member.id&&n.createdAt===today;
+    });
+    if(alreadySentToday){skipped++;return;}
+
+    var st=loanStat(loan);
+    var lateDays=getLoanLateDays(loan);
+    notificationsToAdd.push({
+      id:gid(),
+      memberId:member.id,
+      type:"loan_repayment_reminder",
+      createdAt:today,
+      read:false,
+      loanId:loan.id,
+      loanNo:loan.no,
+      borrower:loan.borrower,
+      amountOutstanding:st.outstanding,
+      loanPeriodMonths:loan.months,
+      overdueDays:lateDays,
+      penaltyInterest:st.penaltyInterest,
+      details:buildLoanRepaymentReminderMessage(loan,st,lateDays)
+    });
+  });
+
+  if(!notificationsToAdd.length){showToast("No new reminders sent (already sent today or no linked members)","warn");return;}
+  S.notifications=S.notifications.concat(notificationsToAdd);
+  DB.set(K.notifications,S.notifications);
+  logEvent("LOAN",S.user?S.user.name:"System","Sent "+notificationsToAdd.length+" repayment reminder(s) to overdue defaulters");
+  showToast("Repayment reminders sent: "+notificationsToAdd.length+(skipped?" ("+skipped+" skipped)":""),"ok");
 }
 
 function getNextSavingsDueDate(){
