@@ -3369,11 +3369,11 @@ function rReports(){
   var totalExp=totalApprovedExpenses();
   function kv(pairs){return pairs.map(function(p){return'<div class="kv-row"><span class="kv-label">'+p[0]+'</span><span class="kv-value">'+p[1]+'</span></div>';}).join("");}
   var top=S.members.filter(function(m){return m.status==="Active";}).slice().sort(function(a,b){return memberTotalSavings(b.id)-memberTotalSavings(a.id);}).slice(0,10);
-  var canClearData = S.user && (S.user.access==="full"||S.user.access==="treasurer"||S.user.access==="secretary");
+  var canClearData = S.user && S.user.access==="full"; // IT Admin only
   return'<div class="fadein"><div class="page-hdr"><div><h1 class="fd page-title">Reports</h1><div class="page-sub">'+MS[n.getMonth()]+' '+n.getFullYear()+'</div></div>'+
     '<div class="fl" style="gap:8px;flex-wrap:wrap">'+
       '<button class="btn btn-p btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>'+
-      '<button class="btn btn-g btn-sm" onclick="S.modal={id:\'member-data-audit\',size:\'modal-xl\'};render()">🧮 Member Data Audit</button>'+
+      (canClearData?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'member-data-audit\',size:\'modal-xl\'};render()">🧮 Member Data Audit</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreMembersFromLocalBackup()">👥 Restore Members Backup</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'restore-loans\'};render()">♻️ Restore Loans Backup</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreLoansFromAuditLog()">🧾 Recover Loans From Audit</button>':'')+
