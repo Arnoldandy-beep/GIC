@@ -1984,6 +1984,342 @@ function exportToExcel(){
   showToast("Excel backup exported");
 }
 
+function exportMatureReports(){
+  if(typeof XLSX==="undefined"){showToast("SheetJS not loaded","err");return;}
+
+  var wb=XLSX.utils.book_new();
+  var today=now();
+  var todayIso=todayStr();
+
+  function addSheet(name,rows){
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows&&rows.length?rows:[{Note:"No data available"}]),name);
+  }
+  function pct(n,d){return d>0?Math.round((n/d)*10000)/100:0;}
+
+  var activeMembers=S.members.filter(function(m){return m&&m.status==="Active";});
+  var allMembers=S.members||[];
+  var activeLoans=S.loans.filter(function(l){return l.status==="Active";});
+  var overdueLoans=activeLoans.filter(function(l){return isOverdue(l);});
+  var portfolio=calcLoanPortfolioTotals();
+  var lf=calcAvailableLoanFunds();
+
+  // Savings trends and month-on-month
+  var savingsByMonth=MGRID.filter(function(mg){
+    return mg.yr<today.getFullYear()||(mg.yr===today.getFullYear()&&mg.mo<=today.getMonth());
+  }).map(function(mg){
+    var monthRows=S.savings.filter(function(s){return !s.voided&&s.yr===mg.yr&&s.mo===mg.mo;});
+    var total=monthRows.reduce(function(t,s){return t+Number(s.amount||0);},0);
+    var membersMap={};
+    monthRows.forEach(function(s){if(s.memberId)membersMap[s.memberId]=1;});
+    var contributors=Object.keys(membersMap).length;
+    return{yr:mg.yr,mo:mg.mo,label:mg.l,total:total,contributors:contributors};
+  });
+
+  var savingsTrendRows=savingsByMonth.map(function(r,i){
+    var avg3=Math.round((
+      (savingsByMonth[i]&&savingsByMonth[i].total||0)+
+      (savingsByMonth[i-1]&&savingsByMonth[i-1].total||0)+
+      (savingsByMonth[i-2]&&savingsByMonth[i-2].total||0)
+    )/Math.min(3,i+1));
+    return{
+      "Period":r.label,
+      "Total Savings":r.total,
+      "Contributors":r.contributors,
+      "Average Per Contributor":r.contributors?Math.round(r.total/r.contributors):0,
+      "3-Month Moving Average":avg3
+    };
+  });
+
+  var savingsMoMRows=savingsByMonth.map(function(r,i){
+    var prev=i>0?savingsByMonth[i-1].total:0;
+    var delta=r.total-prev;
+    return{
+      "Period":r.label,
+      "Current Month":r.total,
+      "Previous Month":prev,
+      "Change Amount":delta,
+      "Change %":(i===0?0:pct(delta,prev))
+    };
+  });
+
+  // Savings by area (district)
+  var areaMap={};
+  allMembers.forEach(function(m){
+    var area=(m.district&&String(m.district).trim())||"Unspecified";
+    if(!areaMap[area])areaMap[area]={members:0,activeMembers:0,totalSavings:0,defaulterCount:0,defaulterAmount:0};
+    areaMap[area].members++;
+    if(m.status==="Active")areaMap[area].activeMembers++;
+    var ms=memberTotalSavings(m.id);
+    areaMap[area].totalSavings+=ms;
+    if(m.status==="Active"){
+      var ar=getMemberTotalArrears(m.id);
+      if(ar.totalOwed>0){
+        areaMap[area].defaulterCount++;
+        areaMap[area].defaulterAmount+=ar.totalOwed;
+      }
+    }
+  });
+  var savingsAreaRows=Object.keys(areaMap).sort().map(function(area){
+    var a=areaMap[area];
+    return{
+      "Area":area,
+      "Members":a.members,
+      "Active Members":a.activeMembers,
+      "Total Savings":a.totalSavings,
+      "Average Savings per Member":a.members?Math.round(a.totalSavings/a.members):0,
+      "Savings Defaulters":a.defaulterCount,
+      "Defaulter Amount":a.defaulterAmount
+    };
+  });
+
+  // Savings defaulters
+  var savingsDefaulterRows=activeMembers.map(function(m){
+    var ar=getMemberTotalArrears(m.id);
+    if(ar.totalOwed<=0)return null;
+    return{
+      "Member No":m.no,
+      "Member Name":m.fullName,
+      "Phone":m.phone||"",
+      "District":m.district||"",
+      "Months in Arrears":ar.months.length,
+      "Total Owed":ar.totalOwed,
+      "Oldest Unpaid Period":ar.months.length?ar.months[0].label:"",
+      "Latest Unpaid Period":ar.months.length?ar.months[ar.months.length-1].label:""
+    };
+  }).filter(function(x){return !!x;}).sort(function(a,b){return b["Total Owed"]-a["Total Owed"];});
+
+  // Loan counts and summary (bank-style KPI view)
+  var loanCounts={
+    pending:S.loans.filter(function(l){return l.status==="Pending";}).length,
+    active:activeLoans.length,
+    cleared:S.loans.filter(function(l){return l.status==="Cleared";}).length,
+    declined:S.loans.filter(function(l){return l.status==="Declined";}).length
+  };
+  var totalOutstandingActive=activeLoans.reduce(function(t,l){return t+loanStat(l).outstanding;},0);
+  var overdueOutstanding=overdueLoans.reduce(function(t,l){return t+loanStat(l).outstanding;},0);
+  var par90Outstanding=overdueLoans.filter(function(l){return getLoanLateDays(l)>=90;}).reduce(function(t,l){return t+loanStat(l).outstanding;},0);
+  var totalPenaltyOutstanding=overdueLoans.reduce(function(t,l){return t+loanStat(l).penaltyInterest;},0);
+
+  var loanSummaryRows=[
+    {"Metric":"Total Loans", "Value":S.loans.length},
+    {"Metric":"Pending Loans", "Value":loanCounts.pending},
+    {"Metric":"Active Loans", "Value":loanCounts.active},
+    {"Metric":"Cleared Loans", "Value":loanCounts.cleared},
+    {"Metric":"Declined Loans", "Value":loanCounts.declined},
+    {"Metric":"Total Principal Disbursed", "Value":S.loans.reduce(function(t,l){return t+Number(l.principal||0);},0)},
+    {"Metric":"Outstanding Principal (Active)", "Value":portfolio.outstandingPrincipal},
+    {"Metric":"Outstanding Interest (Active)", "Value":portfolio.interestReceivable},
+    {"Metric":"Total Outstanding (Active)", "Value":totalOutstandingActive},
+    {"Metric":"Overdue Loans Count", "Value":overdueLoans.length},
+    {"Metric":"Overdue Outstanding", "Value":overdueOutstanding},
+    {"Metric":"Penalty Interest Outstanding", "Value":totalPenaltyOutstanding},
+    {"Metric":"PAR 30 (%)", "Value":pct(overdueOutstanding,totalOutstandingActive)},
+    {"Metric":"PAR 90 (%)", "Value":pct(par90Outstanding,totalOutstandingActive)},
+    {"Metric":"Collection Ratio (%)", "Value":pct(S.repayments.reduce(function(t,r){return t+Number(r.amount||0);},0),S.loans.reduce(function(t,l){return t+loanStat(l).total;},0))}
+  ];
+
+  var loanOverdueRows=overdueLoans.map(function(l){
+    var st=loanStat(l);
+    var lateDays=getLoanLateDays(l);
+    return{
+      "Loan No":l.no,
+      "Borrower":l.borrower,
+      "Phone":((resolveMemberFromLoanRef(l.memberNo||l.borrower)||{}).phone)||"",
+      "Principal":Number(l.principal||0),
+      "Outstanding Principal":st.outstandingPrincipal,
+      "Outstanding Interest":st.outstandingInterest,
+      "Penalty Interest":st.penaltyInterest,
+      "Total Outstanding":st.outstanding,
+      "Days Overdue":lateDays,
+      "Penalty Months":st.penaltyMonths,
+      "Due Date":loanDueDate(l,l.months),
+      "Rate %/mo":Number(l.rate||0)
+    };
+  }).sort(function(a,b){return b["Days Overdue"]-a["Days Overdue"];});
+
+  var loanDefaulterRows=loanOverdueRows.map(function(r){
+    return{
+      "Borrower":r["Borrower"],
+      "Phone":r["Phone"],
+      "Loan No":r["Loan No"],
+      "Total Outstanding":r["Total Outstanding"],
+      "Days Overdue":r["Days Overdue"],
+      "Penalty Interest":r["Penalty Interest"]
+    };
+  });
+
+  var loanPenaltyRows=activeLoans.map(function(l){
+    var st=loanStat(l);
+    if(st.penaltyInterest<=0)return null;
+    return{
+      "Loan No":l.no,
+      "Borrower":l.borrower,
+      "Rate %/mo":Number(l.rate||0),
+      "Penalty Months":st.penaltyMonths,
+      "Penalty Interest":st.penaltyInterest,
+      "Days Overdue":getLoanLateDays(l)
+    };
+  }).filter(function(x){return !!x;}).sort(function(a,b){return b["Penalty Interest"]-a["Penalty Interest"];});
+
+  var loanBookRows=S.loans.map(function(l){
+    var st=loanStat(l);
+    var due=loanDueDate(l,l.months);
+    var repayments=S.repayments.filter(function(r){return r.loanId===l.id;});
+    var firstPay=repayments.length?repayments.slice().sort(function(a,b){return a.date.localeCompare(b.date);})[0].date:"";
+    var lastPay=repayments.length?repayments.slice().sort(function(a,b){return b.date.localeCompare(a.date);})[0].date:"";
+    return{
+      "Loan No":l.no,
+      "Borrower":l.borrower,
+      "Member/Non-Member":l.isMember?"Member":"Non-Member",
+      "Principal":Number(l.principal||0),
+      "Rate %/mo":Number(l.rate||0),
+      "Term (Months)":Number(l.months||0),
+      "Issued Date":l.issued||"",
+      "Approved Date":l.approvedAt||"",
+      "Disbursed Date":l.disbursedAt||"",
+      "Due Date":due,
+      "Status":l.status,
+      "Total Due":st.total,
+      "Total Paid":st.paid,
+      "Outstanding":st.outstanding,
+      "Outstanding Principal":st.outstandingPrincipal,
+      "Outstanding Interest":st.outstandingInterest,
+      "Penalty Interest":st.penaltyInterest,
+      "Days Overdue":l.status==="Active"?getLoanLateDays(l):0,
+      "Repayment Count":repayments.length,
+      "First Repayment":firstPay,
+      "Last Repayment":lastPay,
+      "Guarantor 1":l.g1Name||"",
+      "Guarantor 2":l.g2Name||""
+    };
+  }).sort(function(a,b){return String(a["Loan No"]).localeCompare(String(b["Loan No"]));});
+
+  var loanAgingBuckets=[
+    {label:"Current (0 days)",min:0,max:0},
+    {label:"1-30 Days",min:1,max:30},
+    {label:"31-60 Days",min:31,max:60},
+    {label:"61-90 Days",min:61,max:90},
+    {label:">90 Days",min:91,max:99999}
+  ].map(function(b){
+    var set=activeLoans.filter(function(l){
+      var d=getLoanLateDays(l);
+      return d>=b.min&&d<=b.max;
+    });
+    return{
+      "Aging Bucket":b.label,
+      "Loan Count":set.length,
+      "Outstanding Principal":set.reduce(function(t,l){return t+loanStat(l).outstandingPrincipal;},0),
+      "Outstanding Interest":set.reduce(function(t,l){return t+loanStat(l).outstandingInterest;},0),
+      "Penalty Interest":set.reduce(function(t,l){return t+loanStat(l).penaltyInterest;},0),
+      "Total Outstanding":set.reduce(function(t,l){return t+loanStat(l).outstanding;},0)
+    };
+  });
+
+  // Balance sheet (management view)
+  var annualFeePaid=annualFeesCollected();
+  var annualFeeOutstanding=S.members.reduce(function(t,m){
+    return t+(m.annualFees||[]).filter(function(f){return f.status!=="Paid";}).reduce(function(a,f){return a+Number(f.amount||0);},0);
+  },0);
+  var finesCollected=totalFinesCollected();
+  var finesOutstanding=totalFinesOutstanding();
+  var operationalIncome=totalOperationalIncome();
+  var approvedExpenses=totalApprovedExpenses();
+  var retainedSurplus=annualFeePaid+finesCollected+operationalIncome-approvedExpenses;
+
+  var assetsCash=portfolio.availableCash;
+  var assetsLoanPrincipal=portfolio.outstandingPrincipal;
+  var assetsLoanInterest=portfolio.interestReceivable;
+  var assetsFeesReceivable=annualFeeOutstanding;
+  var assetsFinesReceivable=finesOutstanding;
+  var totalAssets=assetsCash+assetsLoanPrincipal+assetsLoanInterest+assetsFeesReceivable+assetsFinesReceivable;
+
+  var liabilitiesMemberSavings=activePoolSavingsGross();
+  var totalLiabilities=liabilitiesMemberSavings;
+  var totalLiabilitiesEquity=totalLiabilities+retainedSurplus;
+
+  var balanceSheetRows=[
+    {"Section":"ASSETS","Line Item":"Cash Available for New Loans","Amount":assetsCash},
+    {"Section":"ASSETS","Line Item":"Loans Receivable - Principal","Amount":assetsLoanPrincipal},
+    {"Section":"ASSETS","Line Item":"Loans Receivable - Interest","Amount":assetsLoanInterest},
+    {"Section":"ASSETS","Line Item":"Annual Fees Receivable","Amount":assetsFeesReceivable},
+    {"Section":"ASSETS","Line Item":"Fines Receivable","Amount":assetsFinesReceivable},
+    {"Section":"ASSETS","Line Item":"TOTAL ASSETS","Amount":totalAssets},
+    {"Section":"LIABILITIES","Line Item":"Members Savings Payable (Gross)","Amount":liabilitiesMemberSavings},
+    {"Section":"LIABILITIES","Line Item":"TOTAL LIABILITIES","Amount":totalLiabilities},
+    {"Section":"EQUITY","Line Item":"Retained Surplus (Fees + Fines + Op Income - Expenses)","Amount":retainedSurplus},
+    {"Section":"LIABILITIES + EQUITY","Line Item":"TOTAL LIABILITIES + EQUITY","Amount":totalLiabilitiesEquity},
+    {"Section":"CHECK","Line Item":"Balancing Difference (Assets - L+E)","Amount":totalAssets-totalLiabilitiesEquity}
+  ];
+
+  // Annual fees and fines ledgers
+  var annualFeeRows=[];
+  S.members.forEach(function(m){
+    (m.annualFees||[]).forEach(function(f){
+      annualFeeRows.push({
+        "Member No":m.no,
+        "Member Name":m.fullName,
+        "Year":f.year,
+        "Amount":Number(f.amount||0),
+        "Status":f.status,
+        "Recorded Date":f.date||"",
+        "Deadline":annualFeeDeadline(Number(f.year)||today.getFullYear())
+      });
+    });
+  });
+  annualFeeRows.sort(function(a,b){
+    if(String(a["Year"])!==String(b["Year"]))return String(b["Year"]).localeCompare(String(a["Year"]));
+    return String(a["Member No"]).localeCompare(String(b["Member No"]));
+  });
+
+  var finesRows=[];
+  S.members.forEach(function(m){
+    (m.fines||[]).forEach(function(f){
+      finesRows.push({
+        "Member No":m.no,
+        "Member Name":m.fullName,
+        "Date":f.date||"",
+        "Violation":f.violation||f.reason||"Fine",
+        "Amount":Number(f.amount||0),
+        "Status":f.status||"Unpaid",
+        "Issued By":f.issuedBy||""
+      });
+    });
+  });
+  finesRows.sort(function(a,b){return String(b["Date"]).localeCompare(String(a["Date"]));});
+
+  // Cover/summary sheet
+  addSheet("Report Summary",[
+    {"Report Name":"GAZEBO Mature Reports Pack","Generated On":todayIso,"Generated By":S.user?S.user.name:"System","Notes":"Savings, Loans, Loan Book, Balance Sheet, Annual Fees, Fines"},
+    {"Report Name":"Active Members","Generated On":"","Generated By":"","Notes":activeMembers.length},
+    {"Report Name":"Active Loans","Generated On":"","Generated By":"","Notes":activeLoans.length},
+    {"Report Name":"Overdue Loans","Generated On":"","Generated By":"","Notes":overdueLoans.length},
+    {"Report Name":"Pool Utilization %","Generated On":"","Generated By":"","Notes":lf.utilizationPct}
+  ]);
+
+  // Savings sheets
+  addSheet("Savings Trends",savingsTrendRows);
+  addSheet("Savings MoM",savingsMoMRows);
+  addSheet("Savings Areas",savingsAreaRows);
+  addSheet("Savings Defaulters",savingsDefaulterRows);
+
+  // Loans sheets
+  addSheet("Loan Summary",loanSummaryRows);
+  addSheet("Loan Defaulters",loanDefaulterRows);
+  addSheet("Loan Overdues",loanOverdueRows);
+  addSheet("Loan Penalties",loanPenaltyRows);
+  addSheet("Loan Aging PAR",loanAgingBuckets);
+  addSheet("Loan Book",loanBookRows);
+
+  // Finance sheets
+  addSheet("Balance Sheet",balanceSheetRows);
+  addSheet("Annual Fees",annualFeeRows);
+  addSheet("Fines",finesRows);
+
+  XLSX.writeFile(wb,"GAZEBO_GIC_Mature_Reports_"+todayIso+".xlsx");
+  logEvent("EXPORT",S.user?S.user.name:"System","Mature reports export — "+todayIso);
+  showToast("Mature reports exported","ok");
+}
+
 // ─── 11. RENDER ────────────────────────────────────
 function render(){
   // ── CRITICAL: Remove any existing modal overlay from previous render ──
@@ -3435,6 +3771,7 @@ function rReports(){
   var canClearData = S.user && S.user.access==="full"; // IT Admin only
   return'<div class="fadein"><div class="page-hdr"><div><h1 class="fd page-title">Reports</h1><div class="page-sub">'+MS[n.getMonth()]+' '+n.getFullYear()+'</div></div>'+
     '<div class="fl" style="gap:8px;flex-wrap:wrap">'+
+      '<button class="btn btn-grn btn-sm" onclick="exportMatureReports()">📊 Export Mature Reports</button>'+
       '<button class="btn btn-p btn-sm" onclick="exportToExcel()">⬇️ Export Excel</button>'+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="S.modal={id:\'member-data-audit\',size:\'modal-xl\'};render()">🧮 Member Data Audit</button>':'')+
       (canClearData?'<button class="btn btn-g btn-sm" onclick="restoreMembersFromLocalBackup()">👥 Restore Members Backup</button>':'')+
